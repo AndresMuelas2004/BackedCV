@@ -4,6 +4,8 @@ Is this job worth applying to? Paste a posting, upload your CV, and see what wou
 
 I built BackedCV solo during the Grevix AfterCode 24-hour hackathon (October 2026). It is a FastAPI and React web app that calls Claude Haiku 5.5 through the Anthropic API. During the event it called OpenAI models; I moved it to Claude after the event (see [How it evolved](#how-it-evolved)).
 
+**Award:** I won [Adaptive Legend](https://www.linkedin.com/feed/update/urn:li:activity:7519340939363139584/) with BackedCV, the prize for the best adaptation to the [Challenge Cards](docs/challenge-cards.md). It was one of the 2 special awards among 17 prizes (15 went to the top 15) at GREVIX AfterCode 2026, an online hackathon run by university students in India with 1,200+ registered participants.
+
 **Try it in 2 minutes: [backedcv.onrender.com](https://backedcv.onrender.com).** Press **Try the sample** or **Try a posting with hidden barriers**, answer the yes/no questions, then press **Improve my CV**. It is a temporary demo on a free server, so the first visit may take a minute to wake it up. Please use the samples or a CV with fictional details. Feedback is welcome in the [feedback form](https://github.com/AndresMuelas2004/Grevix_BackedCV/issues/new?template=feedback.yml).
 
 **Demo video (81 seconds): [youtu.be/1tFbO5Qdkbw](https://youtu.be/1tFbO5Qdkbw)**
