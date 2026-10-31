@@ -146,7 +146,7 @@ Max concurrency is 4 (`run_config`).
 ## 7. Tech stack
 
 - **Backend:** Python 3.12+, FastAPI, Uvicorn, Pydantic, pydantic-settings.
-- **Graph and LLM:** LangGraph, LangChain (`create_agent` for the order agent), langchain-anthropic. Model: Claude Haiku 5.5 (`claude-haiku-5-5`) for both tiers by default. During the event the app used OpenAI models (`gpt-6-luna` and `gpt-6.1-sol`).
+- **Graph and LLM:** LangGraph, LangChain (`create_agent` for the order agent), langchain-anthropic. Model: Claude Haiku 5.5 (`claude-haiku-5-5`) for both tiers by default.
 - **Storage:** SQLite through `langgraph-checkpoint-sqlite`.
 - **Reading CVs:** pdfplumber (PDF), python-docx and lxml (DOCX).
 - **Writing CVs:** Typst through the `typst` package (PDF, also used by `final_checks`). python-docx (DOCX, `render_docx`, used by the DOCX download).

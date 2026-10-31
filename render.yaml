@@ -1,4 +1,4 @@
-# Render Blueprint: a temporary public demo for the hackathon's feedback round (free plan).
+# Render Blueprint: the public demo (free plan).
 # The Anthropic key is entered in the Render dashboard, never committed.
 services:
   - type: web

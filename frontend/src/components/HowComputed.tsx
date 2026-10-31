@@ -2,8 +2,8 @@ import type { UsageTotal } from '../api/types'
 import { formatNumber, formatUsd } from '../lib/format'
 import './HowComputed.css'
 
-const REPOSITORY_URL = 'https://github.com/AndresMuelas2004/Grevix_BackedCV'
-const SCORING_URL = 'https://github.com/AndresMuelas2004/Grevix_BackedCV/blob/main/docs/scoring.md'
+const REPOSITORY_URL = 'https://github.com/AndresMuelas2004/BackedCV'
+const SCORING_URL = 'https://github.com/AndresMuelas2004/BackedCV/blob/main/docs/scoring.md'
 
 interface HowComputedProps {
   usage: UsageTotal
@@ -49,7 +49,7 @@ export default function HowComputed({ usage }: HowComputedProps) {
         </p>
         <p>The files you upload are not stored. Analyses are deleted after 24 hours.</p>
         <p>
-          Source code: <a href={REPOSITORY_URL}>Grevix_BackedCV on GitHub</a>.
+          Source code: <a href={REPOSITORY_URL}>BackedCV on GitHub</a>.
         </p>
       </div>
     </details>

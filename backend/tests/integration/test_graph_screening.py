@@ -132,7 +132,7 @@ def match_draft(requirement_ids: list[str]) -> MatchChunkDraft:
 
 
 @pytest.fixture
-def card1(monkeypatch):
+def screening(monkeypatch):
     monkeypatch.setattr(fakes, "structure_draft", cv_structure)
     monkeypatch.setattr(fakes, "job_draft", job_draft)
     monkeypatch.setattr(fakes, "match_draft", match_draft)
@@ -159,7 +159,7 @@ def _visa_risks(values: dict) -> list[dict]:
     return [r for r in values["hidden_risks"] if r["kind"] == "work_authorization"]
 
 
-async def test_a_buried_visa_barrier_and_an_old_job_are_caught(card1):
+async def test_a_buried_visa_barrier_and_an_old_job_are_caught(screening):
     graph, config = await _run_to_report(FakeOptimizeLLM())
     report = (await graph.aget_state(config)).values
     assert (await graph.aget_state(config)).next == ("await_optimize",)
@@ -183,7 +183,7 @@ async def test_a_buried_visa_barrier_and_an_old_job_are_caught(card1):
     ]
 
 
-async def test_a_model_reading_of_the_same_barrier_is_not_counted_twice(card1):
+async def test_a_model_reading_of_the_same_barrier_is_not_counted_twice(screening):
     barrier = BarrierDraft(
         kind="work_authorization",
         quote="unable to sponsor visas",
@@ -203,7 +203,7 @@ async def test_a_model_reading_of_the_same_barrier_is_not_counted_twice(card1):
     assert len(_visa_risks(values)) == 1
 
 
-async def test_a_failing_barrier_screen_keeps_the_rule_barriers(card1):
+async def test_a_failing_barrier_screen_keeps_the_rule_barriers(screening):
     class BrokenBarrierLLM(FakeOptimizeLLM):
         async def run(self, prompt, data, schema, *, node):
             if schema is HiddenBarriersDraft:
@@ -218,7 +218,7 @@ async def test_a_failing_barrier_screen_keeps_the_rule_barriers(card1):
     assert [r["risk"] for r in _visa_risks(values)] == ["high"]
 
 
-async def test_a_state_from_before_card1_recomputes_to_the_same_result(card1):
+async def test_a_state_from_before_screening_recomputes_to_the_same_result(screening):
     graph, config = await _run_to_report(FakeOptimizeLLM())
     values = (await graph.aget_state(config)).values
     new_keys = ("barrier_items", "recency", "hidden_risks", "screening_flags", "refusals")
@@ -227,7 +227,7 @@ async def test_a_state_from_before_card1_recomputes_to_the_same_result(card1):
     assert recompute(older) == recompute(values)
 
 
-async def test_a_recency_window_the_model_finds_is_checked_too(card1):
+async def test_a_recency_window_the_model_finds_is_checked_too(screening):
     barrier = BarrierDraft(
         kind="recency",
         quote=RECENT_SENTENCE,

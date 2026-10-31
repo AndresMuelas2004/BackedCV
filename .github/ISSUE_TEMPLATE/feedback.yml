@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking a look at BackedCV, built during the GREVIX AfterCode hackathon.
+        Thanks for taking a look at BackedCV.
         This page is public: please do not paste a real CV, contact details or other personal data.
   - type: dropdown
     id: seen

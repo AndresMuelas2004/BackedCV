@@ -15,7 +15,7 @@ from backedcv.main import create_app
 from tests.fakes import CV_TEXT, JOB_TEXT
 from tests.fakes_optimize import FakeOptimizeLLM
 
-CARD_1_KEYS = {"hidden_risks", "screening_flags", "recency", "refusals"}
+SCREENING_KEYS = {"hidden_risks", "screening_flags", "recency", "refusals"}
 FAITHFUL_EDIT = "Built a support bot with LangGraph, an agent framework"
 
 
@@ -77,7 +77,7 @@ def _hide_risk_on(client, analysis_id: str, requirement_id: str) -> None:
     asyncio.run(graph.aupdate_state(run_config(analysis_id), update, as_node="gate_barriers"))
 
 
-def test_the_card_1_keys_default_to_empty_values():
+def test_the_screening_keys_default_to_empty_values():
     snapshot = SimpleNamespace(values={}, next=("await_optimize",), interrupts=())
 
     projected = project("analysis-id", snapshot)
@@ -86,7 +86,7 @@ def test_the_card_1_keys_default_to_empty_values():
     assert (projected["recency"], projected["refusals"]) == ({}, [])
 
 
-def test_patch_accepts_a_barrier_id_as_an_answer_and_returns_the_card_1_keys(client):
+def test_patch_accepts_a_barrier_id_as_an_answer_and_returns_the_screening_keys(client):
     analysis_id = _analysis_id(client)
 
     response = client.patch(
@@ -96,7 +96,7 @@ def test_patch_accepts_a_barrier_id_as_an_answer_and_returns_the_card_1_keys(cli
     assert response.status_code == 200
     updated = response.json()
     assert updated["facts"]["answers"] == {"H01": True}
-    assert CARD_1_KEYS.issubset(updated)
+    assert SCREENING_KEYS.issubset(updated)
 
 
 def test_a_refused_suggestion_cannot_be_accepted_like_an_unsupported_one(client):
