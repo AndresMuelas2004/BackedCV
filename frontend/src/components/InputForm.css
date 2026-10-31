@@ -221,6 +221,46 @@
   border-color: var(--lp-red);
 }
 
+/* The LinkedIn link box: looks like the textareas above, on one row with its button. */
+.job-link {
+  margin-bottom: 12px;
+}
+
+.job-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-link-row input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: 12px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--lp-ink);
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-control);
+  border-radius: 12px;
+}
+
+.job-link-row input:hover {
+  border-color: #98a2b3;
+}
+
+.job-link-row input::placeholder {
+  color: #667085;
+}
+
+.job-link-row input[aria-invalid='true'] {
+  border-color: var(--lp-red);
+}
+
+.job-link-row .lp-btn {
+  flex: 0 0 auto;
+}
+
 .input-form .field-label {
   font-size: 14px;
   color: var(--lp-ink-2);

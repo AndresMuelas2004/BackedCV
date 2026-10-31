@@ -5,6 +5,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 
+import httpx
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -20,6 +21,7 @@ from backedcv.api.routes import (
     downloads,
     health,
     inputs,
+    job_link,
     meta,
     optimize,
     preview,
@@ -32,8 +34,13 @@ from backedcv.llm.structured import AnthropicStructuredLLM, StructuredLLM
 from backedcv.settings import get_settings
 
 
-def create_app(llm: StructuredLLM | None = None, checkpointer=None) -> FastAPI:
-    """`llm` and `checkpointer` are injectable so tests run without network or disk."""
+def create_app(
+    llm: StructuredLLM | None = None,
+    checkpointer=None,
+    job_link_transport: httpx.AsyncBaseTransport | None = None,
+) -> FastAPI:
+    """`llm` and `checkpointer` are injectable so tests run without network or disk.
+    `job_link_transport` lets tests answer LinkedIn requests without network."""
     settings = get_settings()
     if settings.env == "prod":
         # Traces must not carry the CV or the posting. Set before any model call; values the
@@ -79,10 +86,19 @@ def create_app(llm: StructuredLLM | None = None, checkpointer=None) -> FastAPI:
     app.state.limiter = RunLimiter(
         per_hour=settings.rate_limit_per_hour, per_day=settings.daily_model_runs
     )
+    app.state.job_link_limiter = RunLimiter(
+        per_hour=settings.job_link_per_hour,
+        per_day=settings.job_link_per_day,
+        hourly_code="job_link_rate_limited",
+        daily_code="job_link_daily_limit",
+        daily_title="The daily limit of job link reads has been reached.",
+    )
+    app.state.job_link_transport = job_link_transport
     install_error_handlers(app)
     app.include_router(health.router, prefix="/api")
     app.include_router(analyses.router, prefix="/api")
     app.include_router(inputs.router, prefix="/api")
+    app.include_router(job_link.router, prefix="/api")
     app.include_router(optimize.router, prefix="/api")
     app.include_router(preview.router, prefix="/api")
     app.include_router(downloads.router, prefix="/api")

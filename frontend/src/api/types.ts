@@ -556,6 +556,17 @@ export interface HiddenRiskSample {
   job_text: string
 }
 
+// Body of POST /api/job-link: a LinkedIn posting read by the server, ready for the job box.
+export interface JobLinkResult {
+  job_id: string
+  url: string
+  title: string
+  company: string
+  location: string
+  closed: boolean
+  text: string
+}
+
 // Body of PATCH /api/analyses/{id}/inputs. A field left out keeps its value, and a list that
 // is sent replaces the old one. Sending `facts.answers` replaces the whole answers map, so
 // send every answer each time.

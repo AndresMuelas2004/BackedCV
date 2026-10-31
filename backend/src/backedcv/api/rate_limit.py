@@ -17,10 +17,22 @@ class RunLimiter:
     """Counts the model runs in memory, so the counts start again with the process."""
 
     def __init__(
-        self, per_hour: int, per_day: int, clock: Callable[[], datetime] = utc_now
+        self,
+        per_hour: int,
+        per_day: int,
+        clock: Callable[[], datetime] = utc_now,
+        *,
+        hourly_code: str = "rate_limited",
+        daily_code: str = "daily_limit_reached",
+        daily_title: str = "The daily limit of analyses has been reached.",
     ) -> None:
         self.per_hour, self.per_day = per_hour, per_day
         self._clock = clock
+        self._hourly_code, self._daily_code, self._daily_title = (
+            hourly_code,
+            daily_code,
+            daily_title,
+        )
         self._by_client: dict[str, deque[datetime]] = {}
         self._day: date | None = None
         self._day_runs = 0
@@ -34,8 +46,8 @@ class RunLimiter:
             midnight = datetime.combine(now.date() + timedelta(days=1), time.min, UTC)
             raise ApiError(
                 429,
-                "daily_limit_reached",
-                "The daily limit of analyses has been reached.",
+                self._daily_code,
+                self._daily_title,
                 f"The limit resets at midnight UTC, in {_wait(midnight - now)}.",
             )
         runs = self._by_client.setdefault(client, deque())
@@ -45,7 +57,7 @@ class RunLimiter:
             wait = _wait(runs[0] + HOUR - now)
             raise ApiError(
                 429,
-                "rate_limited",
+                self._hourly_code,
                 "Too many requests from this network.",
                 f"At most {self.per_hour} requests an hour are allowed. Try again in {wait}.",
             )

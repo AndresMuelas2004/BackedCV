@@ -66,6 +66,19 @@ What I decided, what I rejected and why.
 - **Runs live on the server, not in the browser tab.** Closing or reloading the tab mid-analysis used to leave it stuck. Each step now runs as a server task; a reload picks it up again and a failed step can be retried.
 - **Contracts first:** I defined the suggestion and document models before writing the guards, the document assembly and the renderers, so those pieces share one contract.
 
+## Reading a job from its LinkedIn link
+
+- **I read the public posting from its LinkedIn link, as an anonymous visitor.** The user pastes the link and presses "Fetch job"; the server takes the job ID out of it and reads the posting with no login, no cookies and no API key. The server never fetches the URL the user typed, only LinkedIn URLs built from the ID.
+- **The light public page first, the full public page as fallback.** The guest posting page is smaller, and the full job page is read only when it fails.
+- **Cleaning happens in code, not in the model.** The whole page is about 350,000 characters, which would come close to the 100K-token prompt budget. The markup is regular enough for code to pull out the title, company, location, description and criteria, and the model still analyses the text afterwards.
+- **The text lands in the job box for review.** The user checks it before running the analysis. The rest of the flow does not change, and if LinkedIn says the job no longer accepts applications, the form says so.
+- **The limits keep the server a polite visitor.** 20 reads per client address per rolling hour, and 500 per UTC day for all clients together. Each read makes one or two requests with a 10-second timeout and no retries. These limits are separate from the model-run limits. The link and the page are not stored.
+- **LinkedIn may refuse requests from data-center IPs**, such as the hosting provider's. I accept that risk: the app then shows a clear message and the user pastes the text, as before, with no signup needed.
+- **I rejected Sign In with LinkedIn.** It gives the user's name, photo and email, not job postings.
+- **I rejected using my own LinkedIn cookies on the server.** It would put my account at risk and tie every user's request to it.
+- **I rejected passing the whole page to the model.** It would be slower, cost tokens and nearly fill the prompt budget, while the markup is regular enough for code.
+- **Plan B, if LinkedIn blocks the hosting provider:** a browser extension that reads the page in the user's own browser, or a paid scraping service such as Apify.
+
 ## Privacy and limits
 
 - **The model never sees contact details.** Email addresses, phone numbers and links are replaced with placeholders before every model call; the app keeps the original text for the report and the new CV. Matching does not need them, and a CV is personal data.

@@ -11,9 +11,10 @@ import {
   getSampleCvFile,
   getSamples,
   isSampleCvFile,
+  readJobLink,
   type AnalysisInput,
 } from '../api/client'
-import type { Samples } from '../api/types'
+import type { JobLinkResult, Samples } from '../api/types'
 import {
   ACCEPTED_FILE_TYPES,
   MAX_JOB_CHARS,
@@ -59,6 +60,15 @@ async function fetchSamplePdf(sample: Samples): Promise<File | null> {
   }
 }
 
+// The line under the job link box: what was read, and what to check before the analysis.
+function describeJobLink(result: JobLinkResult): string {
+  const job = [result.title, result.company && `at ${result.company}`].filter(Boolean).join(' ')
+  const parts = [job ? `Filled in from LinkedIn: ${job}.` : 'Filled in from LinkedIn.']
+  if (result.closed) parts.push('LinkedIn says this job no longer accepts applications.')
+  parts.push('Check the text below before you run the check.')
+  return parts.join(' ')
+}
+
 export default function InputForm({ draft, onChange, onSubmit }: InputFormProps) {
   const [showProblems, setShowProblems] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
@@ -66,6 +76,10 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
   const [sampleLoading, setSampleLoading] = useState(false)
   const [hiddenSampleLoading, setHiddenSampleLoading] = useState<SampleSource | null>(null)
   const [sampleError, setSampleError] = useState<SampleError | null>(null)
+  const [jobLink, setJobLink] = useState('')
+  const [jobLinkLoading, setJobLinkLoading] = useState(false)
+  const [jobLinkError, setJobLinkError] = useState<string | null>(null)
+  const [jobLinkResult, setJobLinkResult] = useState<JobLinkResult | null>(null)
   const sampleBusy = sampleLoading || hiddenSampleLoading !== null
   const formRef = useRef<HTMLFormElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -188,6 +202,29 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
     }
   }
 
+  // Reads the posting from its LinkedIn link and puts the text in the job box, for the user to check.
+  async function fetchJobLink() {
+    if (jobLinkLoading) return
+    const url = jobLink.trim()
+    if (!url) {
+      setJobLinkError('Paste the link of a LinkedIn job first.')
+      setJobLinkResult(null)
+      return
+    }
+    setJobLinkLoading(true)
+    setJobLinkError(null)
+    setJobLinkResult(null)
+    try {
+      const result = await readJobLink(url)
+      update({ jobText: result.text })
+      setJobLinkResult(result)
+    } catch (error) {
+      setJobLinkError(describeError(error))
+    } finally {
+      setJobLinkLoading(false)
+    }
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setShowProblems(true)
@@ -230,7 +267,7 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
           <h2 id="input-title" tabIndex={-1} data-screen-heading>
             Try it with your CV
           </h2>
-          <p>Paste a job posting and add your CV. No CV at hand? Fill both in with a sample.</p>
+          <p>Paste a job posting or its LinkedIn link, and add your CV. No CV at hand? Fill both in with a sample.</p>
         </div>
 
         <div className="form-fields">
@@ -239,8 +276,57 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
               <label htmlFor="job-text">1. The job posting</label>
             </h3>
             <p id="job-hint" className="field-hint">
-              Paste the full posting, with its requirements.
+              Paste the full posting, with its requirements, or fetch it from its LinkedIn link.
             </p>
+            <div className="job-link">
+              <label htmlFor="job-link" className="field-label">
+                LinkedIn job link (optional)
+              </label>
+              <div className="job-link-row">
+                <input
+                  id="job-link"
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  value={jobLink}
+                  onChange={(event) => {
+                    setJobLink(event.target.value)
+                    setJobLinkError(null)
+                  }}
+                  onKeyDown={(event) => {
+                    // Enter fetches the posting instead of submitting the whole form.
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void fetchJobLink()
+                    }
+                  }}
+                  placeholder="https://www.linkedin.com/jobs/view/..."
+                  aria-describedby="job-link-hint"
+                  aria-invalid={jobLinkError !== null}
+                />
+                <button
+                  type="button"
+                  className="lp-btn lp-btn-secondary"
+                  onClick={() => void fetchJobLink()}
+                  aria-disabled={jobLinkLoading}
+                >
+                  {jobLinkLoading ? 'Fetching job...' : 'Fetch job'}
+                </button>
+              </div>
+              <p id="job-link-hint" className="field-hint">
+                The posting text fills the box below. Check it before you run the check.
+              </p>
+              {jobLinkError && (
+                <p className="notice notice-error" role="alert">
+                  {jobLinkError}
+                </p>
+              )}
+              {jobLinkResult && (
+                <p className="notice notice-info" role="status">
+                  {describeJobLink(jobLinkResult)}
+                </p>
+              )}
+            </div>
             <textarea
               id="job-text"
               ref={jobTextInput}

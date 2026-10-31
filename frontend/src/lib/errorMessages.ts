@@ -51,6 +51,31 @@ const FRIENDLY = {
     message: 'We could not read this file.',
     next: 'Try saving it again as PDF or DOCX, or paste the text.',
   },
+  // A LinkedIn job link
+  job_link_invalid: {
+    message: 'This is not a LinkedIn job link.',
+    next: 'Copy the link of the job from LinkedIn, or paste the posting text below.',
+  },
+  job_link_not_found: {
+    message: 'LinkedIn has no public posting at this link.',
+    next: 'It may have been removed. Paste the posting text below instead.',
+  },
+  job_link_blocked: {
+    message: 'LinkedIn did not let us read this posting.',
+    next: 'Open the job on LinkedIn, copy its text and paste it below.',
+  },
+  job_link_failed: {
+    message: 'The posting could not be read from LinkedIn.',
+    next: 'Try again, or paste the posting text below.',
+  },
+  job_link_rate_limited: {
+    message: 'Too many job links were read from your network in the last hour.',
+    next: 'Try again later, or paste the posting text below.',
+  },
+  job_link_daily_limit: {
+    message: 'The daily limit of job link reads has been reached.',
+    next: 'Paste the posting text below instead.',
+  },
 
   // The request, the answers and the choices
   invalid_request: {

@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     rate_limit_per_hour: int = Field(default=30, ge=1)  # per client address, rolling hour
     daily_model_runs: int = Field(default=300, ge=1)  # all clients together, per UTC day
 
+    # Limits on reading LinkedIn job links, so the server stays a polite anonymous visitor.
+    job_link_per_hour: int = Field(default=20, ge=1)  # per client address, rolling hour
+    job_link_per_day: int = Field(default=500, ge=1)  # all clients together, per UTC day
+
     data_dir: Path = REPO_ROOT / "data"
     frontend_dist: Path = REPO_ROOT / "frontend" / "dist"
     samples_dir: Path = REPO_ROOT / "backend" / "samples"

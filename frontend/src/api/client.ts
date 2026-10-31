@@ -6,6 +6,7 @@ import type {
   ErrorBody,
   HiddenRiskSample,
   InputsUpdate,
+  JobLinkResult,
   OptimizeStep,
   ProgressEvent,
   ProgressStep,
@@ -80,6 +81,21 @@ export async function getHiddenRiskSample(): Promise<HiddenRiskSample> {
   const body: unknown = await response.json()
   if (!isHiddenRiskSample(body)) {
     throw new ApiError(response.status, 'bad_response', 'The sample could not be read.')
+  }
+  return body
+}
+
+// Reads a LinkedIn job posting on the server, from the link the user pasted.
+export async function readJobLink(url: string): Promise<JobLinkResult> {
+  const response = await send(`${API_BASE}/job-link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  if (!response.ok) throw await readError(response)
+  const body: unknown = await response.json()
+  if (!isJobLinkResult(body)) {
+    throw new ApiError(response.status, 'bad_response', 'The posting could not be read.')
   }
   return body
 }
@@ -369,6 +385,19 @@ function isSamples(value: unknown): value is Samples {
 
 function isHiddenRiskSample(value: unknown): value is HiddenRiskSample {
   return isRecord(value) && typeof value.cv_text === 'string' && typeof value.job_text === 'string'
+}
+
+function isJobLinkResult(value: unknown): value is JobLinkResult {
+  return (
+    isRecord(value) &&
+    typeof value.job_id === 'string' &&
+    typeof value.url === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.company === 'string' &&
+    typeof value.location === 'string' &&
+    typeof value.closed === 'boolean' &&
+    typeof value.text === 'string'
+  )
 }
 
 interface SseMessage {
