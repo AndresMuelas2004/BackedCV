@@ -8,7 +8,9 @@ from backedcv.graph.state import AnalysisState
 from backedcv.llm.structured import StructuredLLM
 
 LLM_RETRY = RetryPolicy(max_attempts=2)
-MAX_CONCURRENCY = 4
+# One step of the analysis runs the matching chunks, the posting review and the barrier screen at
+# once: this leaves room for all of them.
+MAX_CONCURRENCY = 8
 
 
 def build_graph(llm: StructuredLLM, checkpointer=None, order_model=None):
@@ -34,16 +36,15 @@ def build_graph(llm: StructuredLLM, checkpointer=None, order_model=None):
     graph.add_node("build_cv", build["build_cv"])
     graph.add_node("final_checks", build["final_checks"])
 
-    # The posting review and the barrier screen start once the job is extracted and run
-    # alongside plan_matching.
+    # The posting review and the barrier screen run in the same step as the matching chunks, so
+    # the slowest of the three decides the wait, not their sum. LangGraph ends a step only when
+    # every node in it has ended, so score_and_verdict always reads their results.
     graph.add_edge(START, "prepare_cv")
     graph.add_edge(START, "prepare_job")
-    graph.add_edge("prepare_job", "review_posting")
-    graph.add_edge("prepare_job", "screen_barriers")
     graph.add_edge(["prepare_cv", "prepare_job"], "plan_matching")
-    graph.add_conditional_edges(
-        "plan_matching", nodes["route_matching"], ["match_chunk", "score_and_verdict"]
-    )
+    graph.add_edge("plan_matching", "review_posting")
+    graph.add_edge("plan_matching", "screen_barriers")
+    graph.add_conditional_edges("plan_matching", nodes["route_matching"], ["match_chunk"])
     graph.add_edge("match_chunk", "score_and_verdict")
     graph.add_edge("score_and_verdict", "await_optimize")
 

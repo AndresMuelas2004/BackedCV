@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 import pytest
@@ -15,8 +16,8 @@ def anyio_backend():
     return "asyncio"
 
 
-async def _run(job_text=JOB_TEXT):
-    llm = FakeLLM()
+async def _run(job_text=JOB_TEXT, llm=None):
+    llm = llm or FakeLLM()
     graph = build_graph(llm, checkpointer=InMemorySaver())
     analysis_id = str(uuid.uuid4())
     config = run_config(analysis_id)
@@ -65,6 +66,14 @@ async def test_full_analysis_pauses_before_optimizing():
     assert values["verdict"]["label"] == "answer_questions"
     assert values["cv"]["facts"][0]["id"] == "F01"
 
+    # The waiting screen names the first requirements as soon as the posting is read.
+    read = next(
+        c
+        for m, c in events
+        if m == "custom" and c["step"] == "prepare_job" and c["status"] == "done"
+    )
+    assert read["labels"][:2] == ["Python", "SQL"]
+
 
 async def test_posting_without_requirements_still_reaches_the_report(monkeypatch):
     from tests import fakes
@@ -77,3 +86,22 @@ async def test_posting_without_requirements_still_reaches_the_report(monkeypatch
     assert state.next == ("await_optimize",)
     assert "match_chunk" not in llm.calls
     assert state.values["score"]["fit"] is None
+
+
+async def test_the_barrier_screen_runs_beside_the_matching():
+    """Each of the two calls waits until the other has started, so the run has no error only
+    when both are in the same step: the matching must not wait for the barrier screen."""
+    started = {"match_chunk": asyncio.Event(), "screen_barriers": asyncio.Event()}
+
+    class Rendezvous(FakeLLM):
+        async def run(self, prompt, data, schema, *, node):
+            if node in started:
+                started[node].set()
+                other = "screen_barriers" if node == "match_chunk" else "match_chunk"
+                await asyncio.wait_for(started[other].wait(), timeout=2)
+            return await super().run(prompt, data, schema, node=node)
+
+    _, state, _ = await _run(llm=Rendezvous())
+
+    assert state.next == ("await_optimize",)
+    assert not state.values.get("errors")

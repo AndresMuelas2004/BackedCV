@@ -32,13 +32,15 @@ from backedcv.llm.drafts import AssessmentDraft
 
 
 def today_of(state: dict) -> date:
-    """The analysis date: the day the analysis was created, so every later check agrees with it."""
-    created = state.get("created_at")
-    if created:
-        try:
-            return datetime.fromisoformat(created).date()
-        except ValueError:
-            pass
+    """The analysis date, so every check of one analysis agrees: `as_of` when the analysis has
+    one (a built-in sample keeps the day its answers were pinned), else the day it was created."""
+    for key in ("as_of", "created_at"):
+        value = state.get(key)
+        if value:
+            try:
+                return datetime.fromisoformat(value).date()
+            except ValueError:
+                continue
     return date.today()
 
 
@@ -55,6 +57,13 @@ def recency_of(state: dict) -> dict[str, RecencyCheck]:
 
 def risks_of(state: dict) -> list[HiddenRisk]:
     return [HiddenRisk.model_validate(r) for r in state.get("hidden_risks") or []]
+
+
+def flagged_of(state: dict) -> dict[str, str]:
+    """Requirement ID -> the rule that flags it (R1 or R2), from the stored flags."""
+    return flags_by_requirement(
+        [RequirementFlag.model_validate(f) for f in state.get("flags") or []]
+    )
 
 
 def _model_windows(barriers: list[BarrierItem]) -> list[RecencyRule]:
@@ -101,12 +110,11 @@ def recompute(state: dict) -> dict:
         for rid, d in (state.get("assessment_drafts") or {}).items()
     }
     facts = CandidateFacts.model_validate(state.get("facts") or {})
-    flags = [RequirementFlag.model_validate(f) for f in state.get("flags") or []]
     banners = [
         PostingBanner.model_validate(b)
         for b in [*(state.get("banners") or []), *(state.get("review_banners") or [])]
     ]
-    flagged = flags_by_requirement(flags)
+    flagged = flagged_of(state)
     excluded = set(state.get("excluded_ids") or [])
     included = set(state.get("included_flagged_ids") or [])
     today = today_of(state)

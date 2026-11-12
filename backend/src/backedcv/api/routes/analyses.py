@@ -1,5 +1,6 @@
 """Create an analysis (streamed with server-sent events) and read it back."""
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterable
@@ -12,10 +13,11 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import ValidationError
 
-from backedcv.api.errors import ApiError
+from backedcv.api.errors import ApiError, analysis_not_found
 from backedcv.api.projection import project
 from backedcv.api.rate_limit import count_model_run
 from backedcv.api.runs import Run, stream_graph
+from backedcv.api.sample_dates import sample_date
 from backedcv.domain.models import CandidateFacts
 from backedcv.domain.text import normalize_text
 from backedcv.graph.builder import run_config
@@ -54,7 +56,8 @@ async def analysis_input(
 
     if cv_file is not None and cv_file.filename:
         data = await cv_file.read(MAX_BYTES + 1)
-        cv = read_cv(data, cv_file.filename)
+        # Reading a PDF takes a moment: a worker thread keeps other requests moving.
+        cv = await asyncio.to_thread(read_cv, data, cv_file.filename)
     elif cv_text and cv_text.strip():
         cv = read_cv_text(cv_text)
     else:
@@ -76,9 +79,12 @@ async def start_analysis(
     analysis_id = str(uuid.uuid4())
     config = run_config(analysis_id)
     created = datetime.now(UTC)
+    # A built-in sample keeps the day its answers were pinned, so its report never changes.
+    pinned_on = await asyncio.to_thread(sample_date, new.job_text, new.cv.lines)
     initial = {
         "analysis_id": analysis_id,
         "created_at": created.isoformat(),
+        "as_of": (pinned_on or created.date()).isoformat(),
         "cv_meta": {
             "kind": new.cv.kind,
             "filename": new.cv.filename,
@@ -121,5 +127,5 @@ async def get_analysis(request: Request, analysis_id: str) -> dict:
     # A run can start or end during the read, so the flag is checked on both sides of it.
     running = running or runs.is_running(analysis_id)
     if not snapshot.values and not running:
-        raise ApiError(404, "not_found", "This analysis does not exist or has expired.")
+        raise analysis_not_found()
     return project(analysis_id, snapshot, running=running, error=runs.failure(analysis_id))

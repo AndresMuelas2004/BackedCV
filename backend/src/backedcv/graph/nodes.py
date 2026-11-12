@@ -2,7 +2,6 @@
 
 import contextlib
 import logging
-from datetime import date
 
 from langgraph.config import get_stream_writer
 from langgraph.types import Send, interrupt
@@ -18,7 +17,7 @@ from backedcv.domain.redaction import numbered_rows
 from backedcv.domain.rules.absurd import flag_requirements
 from backedcv.domain.rules.posting import tool_sprawl_banner
 from backedcv.domain.text import fold_lower, normalize_text
-from backedcv.graph.recompute import recompute
+from backedcv.graph.recompute import recompute, today_of
 from backedcv.graph.state import AnalysisState, MatchTask
 from backedcv.llm.drafts import CVStructureDraft, JobExtractionDraft, MatchChunkDraft
 from backedcv.llm.drafts_optimize import PostingReviewDraft
@@ -28,6 +27,7 @@ from backedcv.llm.structured import StructuredLLM
 
 log = logging.getLogger(__name__)
 CHUNK_SIZE = 8
+LABELS_SHOWN = 8  # requirement labels sent with the progress event, for the waiting screen
 META_FIELDS = (
     "title",
     "company",
@@ -116,7 +116,7 @@ def make_nodes(llm: StructuredLLM):
         except Exception as exc:  # structure is optional: matching works on lines alone
             draft = None
             update["errors"] = [_error("prepare_cv", exc)]
-        cv = build_parsed_cv(lines, draft, today=date.today())
+        cv = build_parsed_cv(lines, draft, today=today_of(state))
         meta = state.get("cv_meta") or {}
         parse_warnings = [
             *run_parse_checks(
@@ -147,7 +147,12 @@ def make_nodes(llm: StructuredLLM):
         job = canonical_requirements(job, posting)
         flags = flag_requirements(job)
         sprawl = tool_sprawl_banner(job)
-        _progress("prepare_job", "done", requirements=len(job.requirements))
+        _progress(
+            "prepare_job",
+            "done",
+            requirements=len(job.requirements),
+            labels=[req.label for req in job.requirements[:LABELS_SHOWN]],
+        )
         return {
             "job_text": posting,
             "job": job.model_dump(),
@@ -158,7 +163,7 @@ def make_nodes(llm: StructuredLLM):
         }
 
     async def review_posting(state: AnalysisState) -> dict:
-        # Same superstep as plan_matching, so score_and_verdict always reads its banners.
+        # Runs in the same step as the matching chunks; score_and_verdict runs after all of them.
         # No progress event: the frontend shows a fixed list of steps.
         job = JobPosting.model_validate(state["job"])
         try:
@@ -174,7 +179,7 @@ def make_nodes(llm: StructuredLLM):
         return {"review_banners": [b.model_dump() for b in banners], "usage": [usage]}
 
     async def screen_barriers(state: AnalysisState) -> dict:
-        # Same superstep as plan_matching, so score_and_verdict always reads the barriers.
+        # Runs in the same step as the matching chunks; score_and_verdict runs after all of them.
         # No progress event: the frontend shows a fixed list of steps.
         posting = state["job_text"]
         job = JobPosting.model_validate(state["job"])
@@ -197,7 +202,10 @@ def make_nodes(llm: StructuredLLM):
     def route_matching(state: AnalysisState):
         job = JobPosting.model_validate(state["job"])
         if not job.requirements:
-            return "score_and_verdict"  # an empty Send list would end the graph early
+            # Nothing to match. An empty task still goes through match_chunk, so the score waits
+            # for the posting review and the barrier screen as in any other run.
+            empty = MatchTask(requirement_ids=[], requirements_block="", cv_block="")
+            return [Send("match_chunk", empty)]
         cv = ParsedCV.model_validate(state["cv"])
         cv_block = cv.numbered()
         tasks = []
@@ -224,6 +232,8 @@ def make_nodes(llm: StructuredLLM):
         return tasks
 
     async def match_chunk(task: MatchTask) -> dict:
+        if not task["requirement_ids"]:
+            return {}
         try:
             draft, usage = await llm.run(
                 load_prompt("match_requirements"),

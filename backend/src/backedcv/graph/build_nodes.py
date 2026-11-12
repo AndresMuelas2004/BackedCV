@@ -1,5 +1,6 @@
 """Build nodes: apply the accepted suggestions, order the result, run the final checks."""
 
+import asyncio
 import logging
 from collections.abc import Callable
 
@@ -19,13 +20,11 @@ from backedcv.domain.models import (
     CVDocument,
     JobPosting,
     ParsedCV,
-    RequirementAssessment,
-    RequirementFlag,
     ReviewDecisions,
     Suggestion,
 )
-from backedcv.domain.rules.absurd import flags_by_requirement
 from backedcv.graph.nodes import _error, _progress
+from backedcv.graph.recompute import assessments_of, flagged_of
 from backedcv.graph.state import AnalysisState
 from backedcv.rendering import render_pdf, roundtrip_check
 
@@ -66,14 +65,10 @@ def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Call
         accepted = {s.id for s in applied}
         score = state.get("score") or {}
         job = JobPosting.model_validate(state.get("job") or {})
-        assessments = {
-            rid: RequirementAssessment.model_validate(a)
-            for rid, a in (state.get("assessments") or {}).items()
-        }
-        flagged = flags_by_requirement(
-            [RequirementFlag.model_validate(f) for f in state.get("flags") or []]
-        )
-        roundtrip_ok, issues = _roundtrip(doc)
+        assessments = assessments_of(state)
+        flagged = flagged_of(state)
+        # Typst and the PDF read-back take a moment: a worker thread keeps other requests moving.
+        roundtrip_ok, issues = await asyncio.to_thread(_roundtrip, doc)
         report = BuildReport(
             diff=diff_document(cv, doc, applied),
             coverage_before=score.get("coverage"),
@@ -100,10 +95,7 @@ def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Call
 def _applied(state: AnalysisState) -> list[Suggestion]:
     """The suggestions the user accepted and the verifier passed, in their stored order."""
     accepted = set(ReviewDecisions.model_validate(state.get("decisions") or {}).accepted)
-    rows = state.get("suggestions") or []
-    # merge_by_id merges mappings, so the suggestions may be stored keyed by ID: accept both.
-    values = rows.values() if isinstance(rows, dict) else rows
-    suggestions = [Suggestion.model_validate(row) for row in values]
+    suggestions = [Suggestion.model_validate(row) for row in state.get("suggestions") or []]
     return [s for s in suggestions if s.id in accepted and s.verification.status == "verified"]
 
 

@@ -8,9 +8,10 @@ Usage (from backend/):
     uv run python scripts/pin_samples.py           # real model calls, writes the file
     uv run python scripts/pin_samples.py --check   # both samples, twice, empty cache, no model
 
-Run it again after a change to a prompt, a model or the code that builds the model's input, and
-when a month starts (the CV's total experience counts months up to today). Entries that no longer
-match are skipped and the samples are answered live; --check shows whether any do.
+Run it again after a change to a prompt, a model or the code that builds the model's input.
+Entries that no longer match are skipped and the samples are answered live; --check shows whether
+any do. The samples are analysed as of the day they were pinned (api/sample_dates.py), so a new
+month does not change them.
 """
 
 import argparse
@@ -27,6 +28,7 @@ from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel
 
+from backedcv.api import sample_dates
 from backedcv.domain.text import normalize_text
 from backedcv.llm import structured
 from backedcv.llm.cache import PINNED_FILE, PINNED_FORMAT, answer_key, pinned_entry
@@ -137,6 +139,8 @@ def _require(ok: bool, step: str, event: str, body: dict) -> None:
 
 def generate(path: Path) -> int:
     """Real runs of both samples on an empty cache; writes the pinned answers file."""
+    recorded = datetime.now(UTC)
+    sample_dates.recording_date = recorded.date()  # the new answers are pinned to today
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         settings = Settings(data_dir=Path(tmp))  # an empty cache; models and key from the env
         print(f"Models: fast={settings.model_fast}, strong={settings.model_strong}")
@@ -151,7 +155,7 @@ def generate(path: Path) -> int:
     payload = {
         "format": PINNED_FORMAT,
         "about": ABOUT,
-        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "generated_at": recorded.isoformat(timespec="seconds"),
         "samples": {name: result["summary"] for name, result in results.items()},
         "entries": sorted(llm.entries.values(), key=lambda e: (e["prompt_id"], e["key"])),
     }

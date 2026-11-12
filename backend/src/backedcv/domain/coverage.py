@@ -18,7 +18,7 @@ def coverage_after(
 ) -> float | None:
     """Keyword coverage (0 to 100) of the new document, with the same inputs as compute_score.
     None when no requirement counts toward coverage."""
-    lines = _shown_lines(doc)
+    lines = shown_lines(doc)
     rechecked: dict[str, RequirementAssessment] = {}
     for req in requirements:
         base = assessments.get(req.id) or RequirementAssessment(
@@ -35,7 +35,7 @@ def coverage_after(
     return score.coverage
 
 
-def _shown_lines(doc: CVDocument) -> list[CVLine]:
+def shown_lines(doc: CVDocument) -> list[CVLine]:
     """Every line the new CV shows: contact details, the headline, headings and body lines."""
     contact = [doc.contact.name, doc.contact.headline, *doc.contact.details]
     lines = [CVLine(id="contact", text=text) for text in contact if text]

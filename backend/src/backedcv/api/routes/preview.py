@@ -7,25 +7,25 @@ from pydantic import BaseModel, Field
 
 from backedcv.api.errors import ApiError
 from backedcv.api.projection import waiting_at_review
-from backedcv.domain.coverage import _shown_lines, coverage_after
+from backedcv.domain.coverage import coverage_after, shown_lines
 from backedcv.domain.document_diff import apply_suggestions, document_from_cv
 from backedcv.domain.keywords import keyword_present
 from backedcv.domain.models import (
     CVDocument,
     JobPosting,
     ParsedCV,
-    RequirementAssessment,
-    RequirementFlag,
     Suggestion,
 )
-from backedcv.domain.rules.absurd import flags_by_requirement
 from backedcv.graph.builder import run_config
+from backedcv.graph.recompute import assessments_of, flagged_of
 
 router = APIRouter(tags=["analyses"])
 
 
 class CoveragePreview(BaseModel):
-    accepted: list[str] = Field(default_factory=list)  # suggestion IDs, e.g. ["S01", "S03"]
+    accepted: list[str] = Field(
+        default_factory=list, max_length=100
+    )  # suggestion IDs, e.g. ["S01", "S03"]
 
 
 @router.post("/analyses/{analysis_id}/coverage-preview")
@@ -55,13 +55,8 @@ async def coverage_preview(request: Request, analysis_id: str, body: CoveragePre
 
     cv = ParsedCV.model_validate(values["cv"])
     job = JobPosting.model_validate(values.get("job") or {})
-    assessments = {
-        rid: RequirementAssessment.model_validate(a)
-        for rid, a in (values.get("assessments") or {}).items()
-    }
-    flagged = flags_by_requirement(
-        [RequirementFlag.model_validate(f) for f in values.get("flags") or []]
-    )
+    assessments = assessments_of(values)
+    flagged = flagged_of(values)
     excluded = values.get("excluded_ids") or []
     included = values.get("included_flagged_ids") or []
 
@@ -78,7 +73,7 @@ async def coverage_preview(request: Request, analysis_id: str, body: CoveragePre
     now = document_from_cv(cv)
     after = apply_suggestions(now, cv, suggestions, body.accepted)
     # The same lines coverage_after counts, so the gained IDs agree with the coverage numbers.
-    lines_now, lines_after = _shown_lines(now), _shown_lines(after)
+    lines_now, lines_after = shown_lines(now), shown_lines(after)
     return {
         "coverage": coverage(after),
         "coverage_now": coverage(now),
