@@ -150,6 +150,14 @@ const FRIENDLY = {
     message: 'Your new CV could not be built.',
     next: 'Go back to the review, check your choices, and try again.',
   },
+  model_unavailable: {
+    message: 'The AI model behind this demo is not available right now.',
+    next: 'This is a free demo with a small budget, which may be used up. Please try again later.',
+  },
+  model_busy: {
+    message: 'The AI model is busy right now.',
+    next: 'Wait a minute, then try again.',
+  },
   still_running: {
     message: 'This is taking longer than expected.',
     next: 'The work keeps going on the server. Reload the page in a few minutes to see the result.',

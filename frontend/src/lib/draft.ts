@@ -5,7 +5,7 @@ import { formatNumber } from './format'
 
 export const MIN_JOB_CHARS = 150
 export const MAX_JOB_CHARS = 20_000
-export const MAX_FILE_BYTES = 4 * 1024 * 1024
+const MAX_FILE_BYTES = 4 * 1024 * 1024
 
 export const ACCEPTED_FILE_TYPES =
   '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document'

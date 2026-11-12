@@ -529,6 +529,7 @@ export interface ProgressEvent<Step extends string = ProgressStep> {
   step: Step
   status: ProgressStatus
   requirements?: number
+  labels?: string[] // with "prepare_job done": the first requirement labels, for the waiting screen
   suggestions?: number
   built_by?: 'agent' | 'fallback'
   roundtrip_ok?: boolean | null

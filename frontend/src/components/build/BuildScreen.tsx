@@ -9,9 +9,10 @@ import './BuildScreen.css'
 interface BuildScreenProps {
   analysis: AnalysisReport
   onStartOver: () => void
+  onDelete: () => void
 }
 
-export default function BuildScreen({ analysis, onStartOver }: BuildScreenProps) {
+export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildScreenProps) {
   const report = analysis.build_report
   if (!report) {
     return (
@@ -122,6 +123,9 @@ export default function BuildScreen({ analysis, onStartOver }: BuildScreenProps)
           </a>
           <button type="button" className="btn btn-secondary" onClick={onStartOver}>
             Start over
+          </button>
+          <button type="button" className="btn btn-quiet" onClick={onDelete}>
+            Delete my data
           </button>
         </div>
       </section>

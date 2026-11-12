@@ -1,7 +1,7 @@
 import type { ParseWarning } from '../api/types'
 
 // Recruiter tips are the parse warnings whose codes start with "tip_". Everything else is a parse problem.
-export function isTip(warning: ParseWarning): boolean {
+function isTip(warning: ParseWarning): boolean {
   return warning.code.startsWith('tip_')
 }
 

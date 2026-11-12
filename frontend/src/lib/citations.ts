@@ -3,12 +3,12 @@
 
 export const COMPUTED_FACT_LABEL = 'Computed from your dates'
 
-export function isFactId(id: string): boolean {
+function isFactId(id: string): boolean {
   return /^F\d+$/.test(id)
 }
 
 // The number of a CV line ID: 39 for "L039". Null for anything else.
-export function lineNumber(id: string): number | null {
+function lineNumber(id: string): number | null {
   const match = /^L(\d+)$/.exec(id)
   return match ? Number(match[1]) : null
 }

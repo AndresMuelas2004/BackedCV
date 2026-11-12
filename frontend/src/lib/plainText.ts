@@ -54,17 +54,10 @@ export function firstSentence(text: string): string {
   return ensurePeriod(match ? match[1] : clean)
 }
 
-export function ensurePeriod(text: string): string {
+function ensurePeriod(text: string): string {
   const clean = text.trim()
   if (clean === '') return ''
   return /[.!?:]$/.test(clean) ? clean : `${clean}.`
-}
-
-export function joinSentences(...parts: (string | null | undefined)[]): string {
-  return parts
-    .map((part) => (part ? ensurePeriod(part) : ''))
-    .filter((part) => part !== '')
-    .join(' ')
 }
 
 // A question's text reduced to letters and digits, to spot the same question asked twice.
@@ -73,9 +66,4 @@ export function normalizeQuestion(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
-}
-
-// "1 thing", "2 things".
-export function plural(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`
 }

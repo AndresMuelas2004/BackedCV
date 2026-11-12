@@ -478,3 +478,39 @@ p {
     scroll-behavior: auto !important;
   }
 }
+
+/* Footer links, the quiet "Delete my data" button and the notice shown after a delete. */
+.app-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+
+.app-footer-links {
+  display: flex;
+  gap: 16px;
+}
+
+.app-footer-links a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.btn.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.btn.btn-quiet:hover {
+  color: var(--red);
+  background: transparent;
+}
+
+.deleted-notice {
+  max-width: 720px;
+  margin: 0 auto 16px;
+}

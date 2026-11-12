@@ -2,6 +2,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
@@ -27,6 +28,7 @@ import {
 } from '../lib/draft'
 import { describeError } from '../lib/errors'
 import { formatBytes, formatNumber } from '../lib/format'
+import { isLinkedInJobLink } from '../lib/jobLink'
 import Benefits from './landing/Benefits'
 import Hero from './landing/Hero'
 import './InputForm.css'
@@ -203,9 +205,9 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
   }
 
   // Reads the posting from its LinkedIn link and puts the text in the job box, for the user to check.
-  async function fetchJobLink() {
+  async function fetchJobLink(link: string = jobLink) {
     if (jobLinkLoading) return
-    const url = jobLink.trim()
+    const url = link.trim()
     if (!url) {
       setJobLinkError('Paste the link of a LinkedIn job first.')
       setJobLinkResult(null)
@@ -223,6 +225,17 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
     } finally {
       setJobLinkLoading(false)
     }
+  }
+
+  // A pasted LinkedIn job link is read at once, in the link box or in the posting box, so nobody
+  // has to find the button. Any other pasted text is left to the browser.
+  function onPasteJobLink(event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
+    const pasted = event.clipboardData.getData('text').trim()
+    if (!isLinkedInJobLink(pasted)) return
+    event.preventDefault()
+    setJobLink(pasted)
+    setJobLinkError(null)
+    void fetchJobLink(pasted)
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -293,6 +306,7 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
                     setJobLink(event.target.value)
                     setJobLinkError(null)
                   }}
+                  onPaste={onPasteJobLink}
                   onKeyDown={(event) => {
                     // Enter fetches the posting instead of submitting the whole form.
                     if (event.key === 'Enter') {
@@ -314,7 +328,7 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
                 </button>
               </div>
               <p id="job-link-hint" className="field-hint">
-                The posting text fills the box below. Check it before you run the check.
+                Paste the link and the posting text fills the box below. Check it before you run the check.
               </p>
               {jobLinkError && (
                 <p className="notice notice-error" role="alert">
@@ -333,6 +347,7 @@ export default function InputForm({ draft, onChange, onSubmit }: InputFormProps)
               rows={10}
               value={draft.jobText}
               onChange={(event) => update({ jobText: event.target.value })}
+              onPaste={onPasteJobLink}
               aria-invalid={shownJob !== null}
               aria-describedby={shownJob ? 'job-hint job-counter job-error' : 'job-hint job-counter'}
               placeholder="Paste the full posting text"

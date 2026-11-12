@@ -12,12 +12,14 @@ export type StepState = 'waiting' | 'active' | 'done'
 export interface ProgressState {
   steps: Record<ProgressStep, StepState>
   requirements: number | null
+  labels: string[] // the first requirements found, shown while they are matched
 }
 
 export function initialProgress(): ProgressState {
   return {
     steps: { prepare_cv: 'waiting', prepare_job: 'waiting', match: 'waiting', score: 'waiting' },
     requirements: null,
+    labels: [],
   }
 }
 
@@ -37,5 +39,9 @@ export function applyProgress(state: ProgressState, event: ProgressEvent): Progr
     event.step === 'prepare_job' && event.status === 'done' && typeof event.requirements === 'number'
       ? event.requirements
       : state.requirements
-  return { steps, requirements }
+  const labels =
+    event.step === 'prepare_job' && event.status === 'done' && Array.isArray(event.labels)
+      ? event.labels
+      : state.labels
+  return { steps, requirements, labels }
 }

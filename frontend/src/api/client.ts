@@ -449,62 +449,51 @@ async function streamEvents<E>(request: StreamRequest<E>): Promise<void> {
   }
 }
 
-function toAnalysisEvent(message: SseMessage): AnalysisEvent | null {
+// What every stream sends: progress, the event that carries the finished report, or an error.
+type StreamEvent<Final extends string, Step extends string> =
+  | { type: 'progress'; progress: ProgressEvent<Step> }
+  | { type: Final; report: AnalysisReport }
+  | { type: 'error'; error: ErrorBody }
+
+// `final` names the event that ends the run; `fallback` is the error shown when an "error" event
+// has no readable body.
+function parseStreamEvent<Final extends string, Step extends string>(
+  message: SseMessage,
+  final: Final,
+  fallback: ErrorBody,
+): StreamEvent<Final, Step> | null {
   const payload = parseJson(message.data)
   switch (message.event) {
-    case 'created':
-      return isRecord(payload) && typeof payload.analysis_id === 'string'
-        ? { type: 'created', analysisId: payload.analysis_id }
-        : null
     case 'progress': {
-      const progress = toProgress<ProgressStep>(payload)
+      const progress = toProgress<Step>(payload)
       return progress ? { type: 'progress', progress } : null
     }
-    case 'report':
-      return isRecord(payload)
-        ? { type: 'report', report: payload as unknown as AnalysisReport }
-        : null
+    case final:
+      return isRecord(payload) ? { type: final, report: payload as unknown as AnalysisReport } : null
     case 'error':
-      return { type: 'error', error: errorFrom(payload, ANALYSIS_FAILED) }
+      return { type: 'error', error: errorFrom(payload, fallback) }
     default:
       return null
   }
+}
+
+// The analysis stream also starts with "created", which carries the new analysis ID.
+function toAnalysisEvent(message: SseMessage): AnalysisEvent | null {
+  if (message.event === 'created') {
+    const payload = parseJson(message.data)
+    return isRecord(payload) && typeof payload.analysis_id === 'string'
+      ? { type: 'created', analysisId: payload.analysis_id }
+      : null
+  }
+  return parseStreamEvent<'report', ProgressStep>(message, 'report', ANALYSIS_FAILED)
 }
 
 function toOptimizeEvent(message: SseMessage): OptimizeEvent | null {
-  const payload = parseJson(message.data)
-  switch (message.event) {
-    case 'progress': {
-      const progress = toProgress<OptimizeStep>(payload)
-      return progress ? { type: 'progress', progress } : null
-    }
-    case 'suggestions':
-      return isRecord(payload)
-        ? { type: 'suggestions', report: payload as unknown as AnalysisReport }
-        : null
-    case 'error':
-      return { type: 'error', error: errorFrom(payload, OPTIMIZE_FAILED) }
-    default:
-      return null
-  }
+  return parseStreamEvent<'suggestions', OptimizeStep>(message, 'suggestions', OPTIMIZE_FAILED)
 }
 
 function toBuildEvent(message: SseMessage): BuildEvent | null {
-  const payload = parseJson(message.data)
-  switch (message.event) {
-    case 'progress': {
-      const progress = toProgress<BuildStep>(payload)
-      return progress ? { type: 'progress', progress } : null
-    }
-    case 'built':
-      return isRecord(payload)
-        ? { type: 'built', report: payload as unknown as AnalysisReport }
-        : null
-    case 'error':
-      return { type: 'error', error: errorFrom(payload, BUILD_FAILED) }
-    default:
-      return null
-  }
+  return parseStreamEvent<'built', BuildStep>(message, 'built', BUILD_FAILED)
 }
 
 // Shape is checked shallowly; the backend is trusted for the rest.

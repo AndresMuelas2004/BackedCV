@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  deleteAnalysis,
   getAnalysis,
   runAnalysis,
   runBuild,
@@ -26,6 +27,7 @@ import RunWatch from './components/RunWatch'
 import { EMPTY_DRAFT, type AnalysisDraft } from './lib/draft'
 import { describeFailure, friendlyText, type KnownCode } from './lib/errorMessages'
 import { isBrokenConnection, toErrorBody } from './lib/errors'
+import { keepServerAwake } from './lib/keepAwake'
 import {
   PROGRESS_STEPS,
   applyProgress,
@@ -58,6 +60,10 @@ type Flow =
     }
 
 const ANALYSIS_PARAM = 'analysis'
+const REPO_URL = 'https://github.com/AndresMuelas2004/BackedCV'
+const FEEDBACK_URL = `${REPO_URL}/issues/new?template=feedback.yml`
+const DELETE_QUESTION =
+  'Delete this analysis from the server now? Your CV text, the posting and the results are removed. This cannot be undone.'
 
 const OPTIMIZE_STEPS: readonly { id: OptimizeStep; label: string }[] = [
   { id: 'suggest', label: 'Suggesting' },
@@ -103,6 +109,7 @@ export default function App() {
   const [analysisProgress, setAnalysisProgress] = useState<ProgressState>(initialProgress)
   const [optimizeEvent, setOptimizeEvent] = useState<ProgressEvent<OptimizeStep> | null>(null)
   const [buildEvent, setBuildEvent] = useState<ProgressEvent<BuildStep> | null>(null)
+  const [deleted, setDeleted] = useState(false)
   const controllerRef = useRef<AbortController | null>(null)
   const mainRef = useRef<HTMLElement>(null)
 
@@ -123,6 +130,9 @@ export default function App() {
         }
       })
   }, [])
+
+  // Keeps the free demo server awake while this page is open (see lib/keepAwake.ts).
+  useEffect(() => keepServerAwake(), [])
 
   // Moves the focus to the heading of each new screen, so keyboard and screen reader users start
   // there. The first screen is left alone: a page load should not take the focus.
@@ -150,6 +160,7 @@ export default function App() {
   }
 
   async function startAnalysis(input: AnalysisInput) {
+    setDeleted(false)
     const signal = beginRun()
     setAnalysisProgress(initialProgress())
     setFlow({ kind: 'analyzing' })
@@ -288,6 +299,23 @@ export default function App() {
     setFlow({ kind: 'idle' })
   }
 
+  // Deletes the analysis on the server (CV text, posting and results), then starts over. An
+  // analysis the server no longer has is already gone, which is what the user asked for.
+  async function removeAnalysis(analysis: AnalysisReport) {
+    if (!window.confirm(DELETE_QUESTION)) return
+    try {
+      await deleteAnalysis(analysis.analysis_id)
+    } catch (error) {
+      const body = toErrorBody(error)
+      if (body.code !== 'not_found') {
+        setFlow({ kind: 'error', error: body, analysis, decisions: null })
+        return
+      }
+    }
+    startOver()
+    setDeleted(true)
+  }
+
   function retryStalled(analysis: AnalysisReport) {
     if (analysis.decisions) void startBuild(analysis, analysis.decisions)
     else if (analysis.verdict) void startOptimize(analysis)
@@ -307,7 +335,16 @@ export default function App() {
   function renderScreen(): ReactNode {
     switch (flow.kind) {
       case 'idle':
-        return <InputForm draft={draft} onChange={setDraft} onSubmit={startAnalysis} />
+        return (
+          <>
+            {deleted && (
+              <p className="notice notice-info deleted-notice" role="status">
+                Your analysis was deleted from the server.
+              </p>
+            )}
+            <InputForm draft={draft} onChange={setDraft} onSubmit={startAnalysis} />
+          </>
+        )
 
       case 'loading':
         return (
@@ -324,6 +361,7 @@ export default function App() {
             <Toolbar onStartOver={startOver} />
             <Progress
               title="Checking your CV against the posting"
+              note="This usually takes 10 to 25 seconds."
               rows={analysisRows(analysisProgress)}
             />
           </>
@@ -368,6 +406,7 @@ export default function App() {
               onStartOver={startOver}
               label="New analysis"
               context={reportContext(analysis)}
+              onDelete={() => void removeAnalysis(analysis)}
             />
             <ReportView
               analysis={analysis}
@@ -394,7 +433,7 @@ export default function App() {
         const { analysis, decisions } = flow
         return (
           <>
-            <Toolbar onStartOver={startOver} />
+            <Toolbar onStartOver={startOver} onDelete={() => void removeAnalysis(analysis)} />
             <ReviewScreen
               analysis={analysis}
               initialDecisions={decisions}
@@ -415,7 +454,13 @@ export default function App() {
         )
 
       case 'built':
-        return <BuildScreen analysis={flow.analysis} onStartOver={startOver} />
+        return (
+          <BuildScreen
+            analysis={flow.analysis}
+            onStartOver={startOver}
+            onDelete={() => void removeAnalysis(flow.analysis)}
+          />
+        )
 
       case 'stalled': {
         const { analysis } = flow
@@ -496,7 +541,17 @@ export default function App() {
       </main>
 
       <footer className="app-footer">
-        <div className="app-footer-inner">Indicative only. BackedCV never invents experience.</div>
+        <div className="app-footer-inner">
+          <span>Indicative only. BackedCV never invents experience.</span>
+          <nav className="app-footer-links" aria-label="About BackedCV">
+            <a href={REPO_URL} target="_blank" rel="noreferrer">
+              Source code
+            </a>
+            <a href={FEEDBACK_URL} target="_blank" rel="noreferrer">
+              Give feedback
+            </a>
+          </nav>
+        </div>
       </footer>
     </div>
   )
@@ -506,12 +561,18 @@ interface ToolbarProps {
   onStartOver: () => void
   label?: string
   context?: string | null // what is being checked, e.g. "Platform Engineer · Sable Creek"
+  onDelete?: () => void // shown as "Delete my data" when the screen holds an analysis
 }
 
-function Toolbar({ onStartOver, label = 'Start over', context = null }: ToolbarProps) {
+function Toolbar({ onStartOver, label = 'Start over', context = null, onDelete }: ToolbarProps) {
   return (
     <div className={context ? 'toolbar toolbar-context' : 'toolbar'}>
       {context && <p className="toolbar-text">{context}</p>}
+      {onDelete && (
+        <button type="button" className="btn btn-quiet" onClick={onDelete}>
+          Delete my data
+        </button>
+      )}
       <button type="button" className="btn btn-secondary" onClick={onStartOver}>
         {label}
       </button>
@@ -604,7 +665,9 @@ function analysisRows(progress: ProgressState): ProgressRow[] {
     detail:
       step.id === 'prepare_job' && progress.steps.prepare_job === 'done' && count !== null
         ? `${count} ${count === 1 ? 'requirement' : 'requirements'} found`
-        : undefined,
+        : step.id === 'match' && progress.steps.match === 'active' && progress.labels.length > 0
+          ? `Checking ${progress.labels.join(', ')}${count !== null && count > progress.labels.length ? ' and more' : ''}`
+          : undefined,
   }))
 }
 

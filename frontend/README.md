@@ -12,3 +12,7 @@ The dev server proxies `/api` to `http://127.0.0.1:8000`.
 ## Build
 
 `npm run build` writes `dist/`. FastAPI serves that folder at `/`.
+
+## Tests
+
+`npm test` runs the unit tests (Vitest) and `npm run lint` runs oxlint.

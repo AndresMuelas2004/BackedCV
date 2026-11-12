@@ -1,6 +1,5 @@
 // Display text for the backend's literal values.
 import type {
-  Badge,
   BarrierKind,
   Category,
   GateName,
@@ -8,7 +7,6 @@ import type {
   KnockoutType,
   MatchType,
   ParseWarning,
-  RiskLevel,
   SectionType,
   Status,
   SuggestionKind,
@@ -52,22 +50,10 @@ export const KNOCKOUT_LABELS: Record<KnockoutType, string> = {
   availability: 'availability',
 }
 
-export const BADGE_LABELS: Record<Badge, string> = {
-  tailor_first: 'Tailor your CV first',
-  screening_risk: 'Screening risk',
-  posting_red_flags: 'Posting red flags',
-}
-
 export const SUGGESTION_KIND_LABELS: Record<SuggestionKind, string> = {
   align_wording: 'Align wording',
   add_skill: 'Add skill',
   tailor_summary: 'Tailor summary',
-}
-
-export const RISK_LEVEL_LABELS: Record<RiskLevel, string> = {
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
 }
 
 // "composite" is a risk that combines several others.
