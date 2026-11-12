@@ -6,12 +6,10 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
 from backedcv.api.errors import ApiError
+from backedcv.rendering import DOCX_TYPE, PDF_TYPE
 from backedcv.settings import get_settings
 
 router = APIRouter(tags=["samples"])
-
-PDF_TYPE = "application/pdf"
-DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 @router.get("/samples")

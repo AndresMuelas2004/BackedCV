@@ -7,7 +7,6 @@ from backedcv.domain.corroboration import (
     not_viable_targets,
     recency_pass,
     refusals_from,
-    requirement_risk,
 )
 from backedcv.domain.models import (
     GatePass,
@@ -76,17 +75,6 @@ def suggestion(
         cited_refs=list(cited),
         verification=Verification(status=status, reason=reason, passes=list(passes)),
     )
-
-
-def test_requirement_risk_takes_the_highest_unresolved_level():
-    assert requirement_risk("R03", []) is None
-    assert requirement_risk("R03", [risk(level="low")]) == "low"
-    assert requirement_risk("R03", [risk(level="medium")]) == "medium"
-    two_mediums = [risk(level="medium"), risk(level="medium", rid="H02")]
-    assert requirement_risk("R03", two_mediums) == "high"
-    assert requirement_risk("R03", [risk(level="low"), risk(level="high", rid="H02")]) == "high"
-    assert requirement_risk("R03", [risk(resolved=True)]) is None
-    assert requirement_risk("R03", [risk(reqs=("R04",))]) is None
 
 
 def test_a_stale_requirement_is_refused_before_any_edit_is_generated():

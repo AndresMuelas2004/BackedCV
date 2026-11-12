@@ -37,7 +37,8 @@ class RequirementAssessment(BaseModel):
 class CandidateFacts(BaseModel):
     """Optional answers that resolve knockout questions. They never enter the CV text."""
 
-    answers: dict[str, bool] = Field(default_factory=dict)  # requirement ID -> yes (True) or no
+    # requirement or barrier ID -> yes (True) or no
+    answers: dict[str, bool] = Field(default_factory=dict, max_length=300)
     work_authorization: list[str] | None = None  # countries
     needs_sponsorship: bool | None = None
     location: str | None = None

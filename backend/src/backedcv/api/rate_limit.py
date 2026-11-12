@@ -9,6 +9,7 @@ from fastapi import Request
 
 from backedcv.api.errors import ApiError
 from backedcv.api.retention import utc_now
+from backedcv.settings import get_settings
 
 HOUR = timedelta(hours=1)
 
@@ -36,10 +37,12 @@ class RunLimiter:
         self._by_client: dict[str, deque[datetime]] = {}
         self._day: date | None = None
         self._day_runs = 0
+        self._swept: datetime | None = None
 
     def check(self, client: str) -> None:
         """Counts one model run for `client`, or raises the 429 that says when to try again."""
         now = self._clock()
+        self._forget_idle_clients(now)
         if now.date() != self._day:
             self._day, self._day_runs = now.date(), 0
         if self._day_runs >= self.per_day:
@@ -64,6 +67,18 @@ class RunLimiter:
         runs.append(now)
         self._day_runs += 1
 
+    def _forget_idle_clients(self, now: datetime) -> None:
+        """Once an hour, drops the clients with no run in the last hour, so the table of clients
+        does not grow for as long as the process lives."""
+        if self._swept is not None and now - self._swept < HOUR:
+            return
+        self._swept = now
+        self._by_client = {
+            client: runs
+            for client, runs in self._by_client.items()
+            if runs and now - runs[-1] < HOUR
+        }
+
 
 def _wait(delta: timedelta) -> str:
     """A short, readable wait: whole minutes, or whole hours when it is more than two hours."""
@@ -73,9 +88,17 @@ def _wait(delta: timedelta) -> str:
     return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
 
 
+def client_address(request: Request) -> str:
+    """The address the per-client limits count. Behind a proxy that writes the caller's address
+    in a header of its own (`BACKEDCV_CLIENT_IP_HEADER`, such as CF-Connecting-IP behind
+    Cloudflare), that header is used: a caller can set the left end of X-Forwarded-For."""
+    header = get_settings().client_ip_header
+    address = request.headers.get(header, "").strip() if header else ""
+    return address or (request.client.host if request.client else "unknown")
+
+
 def count_model_run(request: Request) -> None:
     """Counts one model run for the client, or raises the 429. Call it after validation and stage
     checks, so a refused request uses no quota. It has no await, so check and count cannot
     interleave with another request."""
-    client = request.client.host if request.client else "unknown"
-    request.app.state.limiter.check(client)
+    request.app.state.limiter.check(client_address(request))

@@ -339,12 +339,9 @@ def _with_years(
 def _years_check(req: Requirement, cv: ParsedCV) -> YearsCheck | None:
     if not asks_min_years(req):
         return None
-    if cv.total_months is not None:
-        months, reliable = cv.total_months, not cv.total_is_minimum
-    elif cv.total_years is not None:  # an analysis saved before months were stored
-        months, reliable = round(cv.total_years * 12), True
-    else:
+    if cv.total_months is None:
         return None
+    months, reliable = cv.total_months, not cv.total_is_minimum
     return YearsCheck(
         min_years=req.min_years,
         cv_months=months,

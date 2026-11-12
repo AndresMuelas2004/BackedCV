@@ -140,3 +140,26 @@ def test_the_daily_cap_is_shared_and_starts_again_at_midnight_utc():
 
     clock.now = datetime(2026, 10, 12, 0, 1, tzinfo=UTC)
     limiter.check("198.51.100.3")
+
+
+def test_idle_clients_are_forgotten():
+    now = [datetime(2026, 1, 1, tzinfo=UTC)]
+    limiter = RunLimiter(per_hour=5, per_day=100, clock=lambda: now[0])
+    limiter.check("first")
+    now[0] += timedelta(minutes=61)
+
+    limiter.check("second")
+
+    assert set(limiter._by_client) == {"second"}
+
+
+def test_the_proxy_header_names_the_client(monkeypatch):
+    monkeypatch.setenv("BACKEDCV_CLIENT_IP_HEADER", "CF-Connecting-IP")
+    with _client(monkeypatch, per_hour=1) as client:
+        data = {"cv_text": CV_TEXT, "job_text": JOB_TEXT}
+        first = client.post("/api/analyses", data=data, headers={"CF-Connecting-IP": "203.0.113.1"})
+        other = client.post("/api/analyses", data=data, headers={"CF-Connecting-IP": "203.0.113.2"})
+        again = client.post("/api/analyses", data=data, headers={"CF-Connecting-IP": "203.0.113.1"})
+
+    assert (first.status_code, other.status_code) == (200, 200)
+    assert (again.status_code, again.json()["code"]) == (429, "rate_limited")

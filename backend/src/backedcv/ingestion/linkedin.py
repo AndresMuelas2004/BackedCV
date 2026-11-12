@@ -23,7 +23,7 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml",
     "Accept-Language": "en-US,en;q=0.9",
 }
-TIMEOUT = 10.0  # seconds per request
+TIMEOUT = 6.0  # seconds per request: LinkedIn answers in about a second, or not at all
 MAX_BYTES = 3_000_000
 BLOCK_MARKERS = ("authwall", "login", "signup", "checkpoint")
 

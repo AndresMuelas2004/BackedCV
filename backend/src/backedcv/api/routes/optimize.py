@@ -11,7 +11,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from langgraph.types import Command
 from pydantic import BaseModel, StringConstraints
 
-from backedcv.api.errors import ApiError
+from backedcv.api.errors import ApiError, analysis_not_found
 from backedcv.api.projection import (
     BUILD_STEP,
     OPTIMIZE_STEP,
@@ -46,7 +46,7 @@ BUILD_FAILED = ("build_failed", "The CV could not be built.")
 
 
 class SuggestionEdit(BaseModel):
-    after: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    after: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 async def _claim(request: Request, analysis_id: str, refuse: Callable[[Any], None]) -> Any:
@@ -57,7 +57,7 @@ async def _claim(request: Request, analysis_id: str, refuse: Callable[[Any], Non
     try:
         snapshot = await request.app.state.graph.aget_state(run_config(analysis_id))
         if not snapshot.values:
-            raise ApiError(404, "not_found", "This analysis does not exist or has expired.")
+            raise analysis_not_found()
         refuse(snapshot)
         count_model_run(request)
     except BaseException:
@@ -153,7 +153,7 @@ async def verify_suggestion(
     async with locks.held(analysis_id):
         snapshot = await graph.aget_state(config)
         if not snapshot.values:
-            raise ApiError(404, "not_found", "This analysis does not exist or has expired.")
+            raise analysis_not_found()
         _require_review(snapshot, "Suggestions can only be edited while they wait for review.")
         row = _find_suggestion(snapshot.values, suggestion_id)
         count_model_run(request)

@@ -1,9 +1,9 @@
 """Inputs given after the report (answers, toggles): the score is recomputed, no model call."""
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from backedcv.api.errors import ApiError
+from backedcv.api.errors import ApiError, analysis_not_found
 from backedcv.api.projection import project, waiting_at_report
 from backedcv.domain.models import CandidateFacts, JobPosting
 from backedcv.graph.builder import run_config
@@ -16,8 +16,8 @@ class InputsUpdate(BaseModel):
     """Omitted fields keep their current value; a list that is sent replaces the old list."""
 
     facts: CandidateFacts | None = None  # answers: requirement or barrier IDs (H01...), yes or no
-    excluded_ids: list[str] | None = None  # requirements the user marks as not relevant
-    included_flagged_ids: list[str] | None = None  # flagged requirements to count again
+    excluded_ids: list[str] | None = Field(default=None, max_length=200)  # marked as not relevant
+    included_flagged_ids: list[str] | None = Field(default=None, max_length=200)  # counted again
 
 
 @router.patch("/analyses/{analysis_id}/inputs")
@@ -28,7 +28,7 @@ async def update_inputs(request: Request, analysis_id: str, update: InputsUpdate
     async with locks.held(analysis_id):
         snapshot = await graph.aget_state(config)
         if not snapshot.values:
-            raise ApiError(404, "not_found", "This analysis does not exist or has expired.")
+            raise analysis_not_found()
         if not waiting_at_report(snapshot):
             raise ApiError(409, "not_paused", "Inputs can only change once the report is ready.")
         changes = _merge(snapshot.values, update)

@@ -1,6 +1,7 @@
 """FastAPI app factory: API routes under /api, the built frontend at /."""
 
 import asyncio
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
@@ -13,6 +14,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from backedcv import __version__
 from backedcv.agents.cv_builder.agent import default_order_model
 from backedcv.api.errors import install_error_handlers
+from backedcv.api.headers import ResponseHeaders
 from backedcv.api.locks import RunLocks
 from backedcv.api.rate_limit import RunLimiter
 from backedcv.api.retention import AnalysisLedger, purge_hourly, utc_now
@@ -34,6 +36,18 @@ from backedcv.llm.structured import AnthropicStructuredLLM, StructuredLLM
 from backedcv.settings import get_settings
 
 
+def _show_app_logs() -> None:
+    """The app's own INFO lines (pinned answers loaded, dropped suggestions) reach the console.
+    Uvicorn only sets up its own loggers, so without this only warnings would show. A root
+    logger that already has handlers (tests, another server) is left to do the work."""
+    logger = logging.getLogger("backedcv")
+    logger.setLevel(logging.INFO)
+    if not logging.getLogger().handlers and not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+        logger.addHandler(handler)
+
+
 def create_app(
     llm: StructuredLLM | None = None,
     checkpointer=None,
@@ -41,6 +55,7 @@ def create_app(
 ) -> FastAPI:
     """`llm` and `checkpointer` are injectable so tests run without network or disk.
     `job_link_transport` lets tests answer LinkedIn requests without network."""
+    _show_app_logs()
     settings = get_settings()
     if settings.env == "prod":
         # Traces must not carry the CV or the posting. Set before any model call; values the
@@ -95,6 +110,7 @@ def create_app(
     )
     app.state.job_link_transport = job_link_transport
     install_error_handlers(app)
+    app.add_middleware(ResponseHeaders)
     app.include_router(health.router, prefix="/api")
     app.include_router(analyses.router, prefix="/api")
     app.include_router(inputs.router, prefix="/api")

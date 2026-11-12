@@ -3,7 +3,6 @@
 import re
 from datetime import date
 
-from backedcv.api.projection import cv_view
 from backedcv.domain.barriers import assess_risks, barriers_from_draft, merge_barriers
 from backedcv.domain.builders import build_assessments, build_parsed_cv
 from backedcv.domain.dates import parse_date_range, total_months, unglue_dates
@@ -185,24 +184,6 @@ def test_a_year_only_job_is_flagged_and_the_total_says_it_is_a_minimum():
     assert cv.total_is_minimum is True
     assert "only the year" in cv.dates_note
     assert "at least" in cv.facts[0].text
-
-
-# The projection carries the timeline fields, also for older analyses
-
-
-def test_the_projection_fills_the_timeline_fields_for_older_analyses():
-    old = {"lines": [], "entries": [{"id": "E01", "section_id": "S01", "kind": "job"}]}
-    view = cv_view(old)
-    assert (view["total_months"], view["total_is_minimum"], view["dates_note"]) == (
-        None,
-        False,
-        None,
-    )
-    assert (view["entries"][0]["month_unknown"], view["entries"][0]["months_counted"]) == (
-        False,
-        None,
-    )
-    assert cv_view(None) is None
 
 
 # Minimum years: a serious risk, first, with the numbers

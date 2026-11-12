@@ -1,7 +1,7 @@
 """One interface for every structured LLM call, so tests can swap in canned answers."""
 
 import logging
-from typing import Literal, Protocol, TypeVar
+from typing import Protocol, TypeVar
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -16,7 +16,6 @@ from backedcv.settings import Settings
 log = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
-Tier = Literal["fast", "strong"]
 # Room for the model's thinking plus the longest answer. It also keeps calls non-streaming: the SDK
 # refuses a non-streaming call whose max_tokens could take more than 10 minutes.
 MAX_TOKENS = 16_000

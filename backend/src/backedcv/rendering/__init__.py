@@ -4,4 +4,7 @@ from backedcv.rendering.docx_writer import render_docx
 from backedcv.rendering.pdf_writer import render_pdf
 from backedcv.rendering.roundtrip import roundtrip_check
 
-__all__ = ["render_docx", "render_pdf", "roundtrip_check"]
+PDF_TYPE = "application/pdf"
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+__all__ = ["DOCX_TYPE", "PDF_TYPE", "render_docx", "render_pdf", "roundtrip_check"]

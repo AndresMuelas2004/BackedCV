@@ -16,24 +16,12 @@ from backedcv.domain.models import (
     RecencyCheck,
     Refusal,
     RequirementAssessment,
-    RiskLevel,
     Suggestion,
 )
 from backedcv.domain.models.screening import join_sentences, short_sentence
 
 STALE_AFTER_YEARS = 6.0  # years after which a cited line counts as stale
 PASS_ORDER = ("backed", "recent_enough", "not_blocked")  # the order the gate runs the passes in
-
-
-def requirement_risk(rid: str, risks: list[HiddenRisk]) -> RiskLevel | None:
-    """The highest level among the requirement's unresolved risks. Two unresolved medium risks
-    count as one high one. None when no unresolved risk lists the requirement."""
-    levels = [r.risk for r in _open(rid, risks)]
-    if not levels:
-        return None
-    if "high" in levels or levels.count("medium") >= 2:
-        return "high"
-    return "medium" if "medium" in levels else "low"
 
 
 def not_viable_targets(
@@ -187,8 +175,8 @@ def _open(rid: str, risks: list[HiddenRisk]) -> list[HiddenRisk]:
 
 
 def _blocking(rid: str, risks: list[HiddenRisk]) -> list[HiddenRisk]:
-    """The unresolved eligibility or composite risks that make the requirement high, by the same
-    rule as requirement_risk. Empty if none."""
+    """The unresolved eligibility or composite risks that make the requirement high, counting two
+    unresolved medium risks as one high one. Empty if none."""
     own = [r for r in _open(rid, risks) if r.kind in ELIGIBILITY_KINDS or r.kind == "composite"]
     if sum(r.risk == "medium" for r in own) >= 2:
         return [r for r in own if r.risk != "low"]

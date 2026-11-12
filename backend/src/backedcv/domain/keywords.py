@@ -34,11 +34,6 @@ def contains_term(text: str, term: str) -> bool:
     return bool(pattern and pattern.search(_fold_for_match(text)))
 
 
-def count_term(text: str, term: str) -> int:
-    pattern = _pattern(term)
-    return len(pattern.findall(_fold_for_match(text))) if pattern else 0
-
-
 @dataclass(frozen=True)
 class KeywordHit:
     line_id: str

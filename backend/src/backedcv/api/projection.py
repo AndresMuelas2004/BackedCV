@@ -2,10 +2,6 @@
 
 from typing import Any
 
-from pydantic import ValidationError
-
-from backedcv.domain.models import ParsedCV
-
 REPORT_NODE = "await_optimize"  # the node that pauses once the report is ready
 REPORT_STAGE = "report_ready"
 REVIEW_NODE = "await_review"  # the node that pauses for the user's decisions on suggestions
@@ -75,7 +71,7 @@ def project(
         "status": status_of(snapshot, running, failed=error is not None),
         "stage": _stage(snapshot),
         "cv_meta": values.get("cv_meta"),
-        "cv": cv_view(values.get("cv")),
+        "cv": values.get("cv"),
         "job": values.get("job"),
         "job_notes": values.get("job_notes", []),
         "flags": values.get("flags", []),
@@ -101,17 +97,6 @@ def project(
     if error is not None:  # the same body as the `error` event of the run that failed
         projection["error"] = error
     return projection
-
-
-def cv_view(cv: dict | None) -> dict | None:
-    """The CV with every field of the current model, so analyses saved before a field existed still
-    show its default. A CV that does not validate is shown as stored."""
-    if cv is None:
-        return None
-    try:
-        return ParsedCV.model_validate(cv).model_dump()
-    except ValidationError:
-        return cv
 
 
 def _stage(snapshot: Any) -> str | None:

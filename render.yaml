@@ -19,5 +19,7 @@ services:
         value: "20"
       - key: BACKEDCV_DAILY_MODEL_RUNS
         value: "150"
+      - key: BACKEDCV_CLIENT_IP_HEADER # Render sits behind Cloudflare, which writes the caller's address here
+        value: CF-Connecting-IP
       - key: LANGSMITH_TRACING
         value: "false"

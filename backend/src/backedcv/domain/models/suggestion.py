@@ -59,5 +59,5 @@ class Suggestion(BaseModel):
 
 
 class ReviewDecisions(BaseModel):
-    accepted: list[str] = Field(default_factory=list)
-    rejected: list[str] = Field(default_factory=list)
+    accepted: list[str] = Field(default_factory=list, max_length=200)
+    rejected: list[str] = Field(default_factory=list, max_length=200)
