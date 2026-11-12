@@ -6,7 +6,7 @@ What I decided, what I rejected and why.
 
 - **I build a CV vs job posting checker**, framed as "is this job worth applying to?" rather than "beat the ATS robot". Most ATS do not auto-reject on keywords; what does reject automatically is knockout questions (work authorization, licenses, minimum years, location).
 - **Name: BackedCV.** The `.com` was unregistered and I found no product, package or trademark with that name. I rejected Proofline (domain, PyPI name and a near-identical repository already taken), FitReceipt and WorthApplying.
-- **The posting is pasted as text.** I rejected fetching job URLs: job boards' terms and fragile scraping.
+- **The posting is pasted as text, or read from its public LinkedIn link.** I first rejected fetching job URLs (job boards' terms, fragile scraping) and later added the LinkedIn read with strict limits (see "Reading a job from its LinkedIn link").
 - **No accounts and no signup** for the first analysis.
 
 ## Scoring and verdict
@@ -60,7 +60,10 @@ What I decided, what I rejected and why.
 - **Code applies the accepted changes; a small tool-calling agent only orders the final CV**, with a deterministic fallback. I rejected an agent that writes free text.
 - **When the ordering agent is unavailable, the new CV uses a standard section order.** Keeping the original order would put a two-column CV's sidebar (education, skills) before the summary.
 - **No RAG, vector database or embeddings for now:** one CV and one posting fit in the model's context. Embeddings come in only if meaning-based matching through the model proves unreliable.
-- **The posting review runs beside the matching, not before it.** The R4 review needs the extracted requirements but not the matching, so it runs in parallel and adds no waiting time.
+- **The posting review and the barrier screen run in the same graph step as the matching.** They need the extracted requirements, not the matching. I timed every model call and found that the matching was waiting for them, 3 to 6 seconds of a 16 to 25 second check, because they sat one step earlier; now the slowest of the three decides the wait.
+- **The model keeps its thinking on when it reads the posting.** That call is the slowest (6 to 16 seconds). Turning thinking off made it twice as fast, but in two runs out of two it lost the on-site knockout of the hidden-barriers sample and repeated skills from the duties, so I kept it.
+- **Heavy work leaves the event loop.** Reading an uploaded PDF and rendering and reading back the built PDF run in worker threads, so one user's file does not freeze everyone else's stream.
+- **The built-in samples are analysed as of the day their answers were pinned.** The model's input holds the CV's total experience, which counts months up to the analysis date, so the pinned answers stopped matching when the month ended and the samples went back to live calls. A sample now keeps its pinned date, and a test replays both samples with the model unreachable.
 - **I read PDFs as logical lines, not physical ones.** A real run on a two-column CV showed wrapped bullets turning into fragments, and a rewrite of the first fragment left the rest behind as a duplicate bullet. Bullets and paragraphs are now rebuilt before anything else sees them; short list items stay separate.
 - **Identical model calls are replayed from a local cache.** Re-running the sample gives the same numbers at no cost.
 - **Runs live on the server, not in the browser tab.** Closing or reloading the tab mid-analysis used to leave it stuck. Each step now runs as a server task; a reload picks it up again and a failed step can be retried.
@@ -68,16 +71,17 @@ What I decided, what I rejected and why.
 
 ## Reading a job from its LinkedIn link
 
-- **I read the public posting from its LinkedIn link, as an anonymous visitor.** The user pastes the link and presses "Fetch job"; the server takes the job ID out of it and reads the posting with no login, no cookies and no API key. The server never fetches the URL the user typed, only LinkedIn URLs built from the ID.
+- **I read the public posting from its LinkedIn link, as an anonymous visitor.** The user pastes the link and the posting is fetched at once (a "Fetch job" button does the same); the server takes the job ID out of it and reads the posting with no login, no cookies and no API key. The server never fetches the URL the user typed, only LinkedIn URLs built from the ID.
 - **The light public page first, the full public page as fallback.** The guest posting page is smaller, and the full job page is read only when it fails.
 - **Cleaning happens in code, not in the model.** The whole page is about 350,000 characters, which would come close to the 100K-token prompt budget. The markup is regular enough for code to pull out the title, company, location, description and criteria, and the model still analyses the text afterwards.
 - **The text lands in the job box for review.** The user checks it before running the analysis. The rest of the flow does not change, and if LinkedIn says the job no longer accepts applications, the form says so.
-- **The limits keep the server a polite visitor.** 20 reads per client address per rolling hour, and 500 per UTC day for all clients together. Each read makes one or two requests with a 10-second timeout and no retries. These limits are separate from the model-run limits. The link and the page are not stored.
+- **The limits keep the server a polite visitor.** 20 reads per client address per rolling hour, and 500 per UTC day for all clients together. Each read makes one or two requests with a 6-second timeout and no retries. These limits are separate from the model-run limits. The link and the page are not stored.
 - **LinkedIn may refuse requests from data-center IPs**, such as the hosting provider's. I accept that risk: the app then shows a clear message and the user pastes the text, as before, with no signup needed.
 - **I rejected Sign In with LinkedIn.** It gives the user's name, photo and email, not job postings.
 - **I rejected using my own LinkedIn cookies on the server.** It would put my account at risk and tie every user's request to it.
 - **I rejected passing the whole page to the model.** It would be slower, cost tokens and nearly fill the prompt budget, while the markup is regular enough for code.
 - **Plan B, if LinkedIn blocks the hosting provider:** a browser extension that reads the page in the user's own browser, or a paid scraping service such as Apify.
+- **The slow part was the sleeping server, not LinkedIn.** A read takes about half a second, also from the hosting provider; the minute I had seen was the free server waking up. The page now keeps the server awake while it is open, and a scheduled request keeps it awake during the day.
 
 ## Privacy and limits
 
@@ -85,6 +89,10 @@ What I decided, what I rejected and why.
 - **Production traces hide inputs and outputs**, so real CVs never reach a third-party trace store. Only synthetic data lives in this repository.
 - **Per-IP and daily caps on model-using requests.**
 - **A public feedback form in the repository** (a GitHub issue form) asks people not to paste a real CV.
+- **The page loads nothing from other sites.** The font is served by the app instead of Google Fonts, so opening the page tells no third party who the visitor is, and a content security policy enforces it.
+- **A "Delete my data" button** on the report, the review and the new CV screens deletes the analysis at once, instead of waiting for the 24-hour purge.
+- **The per-client limit reads the proxy's own header.** Behind Cloudflare a caller can set the left end of `X-Forwarded-For`, which is what the server used to read; `CF-Connecting-IP` is overwritten by Cloudflare on every request.
+- **A failure of the model provider is said as such.** A used-up budget or a busy model gets its own message, not "use a different CV file", and the provider's raw message never reaches the page.
 
 ## Model: Claude Haiku 5.5
 
@@ -101,6 +109,6 @@ What I decided, what I rejected and why.
 - **Frontend:** React with TypeScript, built with Vite to static files served by FastAPI, with plain CSS. I rejected HTMX (clumsy for highlights, diffs and live scores), Streamlit (looks like a demo), and Tailwind and component libraries (fewer dependencies for a handful of components).
 - **Reading CVs:** pdfplumber and python-docx. I rejected PyMuPDF because of its AGPL license.
 - **Writing CVs:** python-docx for DOCX and Typst for PDF. I rejected WeasyPrint (system packages in Docker).
-- **Tooling:** uv, ruff, pytest, SQLite checkpoints. **License:** MIT.
+- **Tooling:** uv, ruff, pytest, Vitest and oxlint for the frontend, SQLite checkpoints. GitHub Actions runs them on every push, because every push to `main` deploys the demo. **License:** MIT.
 - **Measurement:** a small fabrication set (suggestions with invented facts, to count how many get blocked) and four end-to-end CV and posting pairs. I rejected a formal eval suite.
-- **Deployment:** a public demo on Render's free plan, from a Blueprint in the repository, with Render's GitHub access limited to this repository. Docker Compose runs it locally.
+- **Deployment:** a public demo on Render's free plan, from a Blueprint in the repository, with Render's GitHub access limited to this repository. Docker Compose runs it locally. The free plan puts the server to sleep after 15 minutes without requests; a scheduled GitHub Actions request keeps it awake during the day (UTC).

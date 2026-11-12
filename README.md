@@ -1,10 +1,12 @@
 # BackedCV
 
+[![CI](https://github.com/AndresMuelas2004/BackedCV/actions/workflows/ci.yml/badge.svg)](https://github.com/AndresMuelas2004/BackedCV/actions/workflows/ci.yml)
+
 Is this job worth applying to? Paste a posting, upload your CV, and see what would screen you out and how to tailor your CV without inventing experience.
 
 I built BackedCV solo. It is a FastAPI and React web app that calls Claude Haiku 5.5 through the Anthropic API.
 
-**Try it in 2 minutes: [backedcv.onrender.com](https://backedcv.onrender.com).** Press **Try the sample** or **Try a posting with hidden barriers**, answer the yes/no questions, then press **Improve my CV**. It is a temporary demo on a free server, so the first visit may take a minute to wake it up. Please use the samples or a CV with fictional details. Feedback is welcome in the [feedback form](https://github.com/AndresMuelas2004/BackedCV/issues/new?template=feedback.yml).
+**Try it in 2 minutes: [backedcv.onrender.com](https://backedcv.onrender.com).** Press **Try the sample** or **Try a posting with hidden barriers**, answer the yes/no questions, then press **Improve my CV**. It runs on a free server that sleeps at night (UTC), so a first visit then may take a minute to wake it up. Please use the samples or a CV with fictional details. Feedback is welcome in the [feedback form](https://github.com/AndresMuelas2004/BackedCV/issues/new?template=feedback.yml).
 
 **Demo video (81 seconds): [youtu.be/1tFbO5Qdkbw](https://youtu.be/1tFbO5Qdkbw)**
 
@@ -17,11 +19,11 @@ Most applicant tracking systems (ATS) do not auto-reject on keywords. Knockout q
 ## Solution
 
 1. **Reads your CV.** It extracts the text from a PDF or DOCX and shows what a parser reads, line by line. It flags parse warnings, such as a two-column PDF.
-2. **Splits the posting into requirements.** You paste the posting, or fetch it from its LinkedIn job link. Each requirement has a type (skill, job title, education, years, language) and is required or preferred. Knockouts are the questions an employer usually screens on, such as work authorization or location. Red flags catch absurd requirements, such as 3 or more years for an entry-level role, or years asked for a technology younger than that.
+2. **Splits the posting into requirements.** You paste the posting, or paste its LinkedIn job link and the text is fetched at once. Each requirement has a type (skill, job title, education, years, language) and is required or preferred. Knockouts are the questions an employer usually screens on, such as work authorization or location. Red flags catch absurd requirements, such as 3 or more years for an entry-level role, or years asked for a technology younger than that.
 3. **Finds the evidence.** Each requirement is linked to the CV lines that prove it, by exact words or by meaning.
 4. **Flags hidden screening risks.** It reads the whole posting for buried disqualifiers, such as "we are unable to sponsor work visas" in a closing note or Kubernetes "within the last 5 years", quotes them, and checks them against your CV and your answers. Each CV line inherits the dates of its job, so old evidence is marked; a requirement whose keyword is in your CV but whose evidence is too old is marked "Looks met, but...".
 5. **Gives a verdict and ranks what to fix.** One headline number, the skills match (Fit: do you meet the requirements?), and in the details an exact-word match (Keyword coverage: would an exact-term search find you?). The verdict is Likely screened out, Answer questions first, Apply, Stretch or Long shot; only a legal ban (work permit, clearance, license) or a "No" to a firm rule screens you out on its own. The open yes/no questions sit right under the verdict, and answering them updates it without a new model call. Then a numbered list ranks what to fix in three tiers (could rule you out, serious gap, worth improving), each item with the posting's sentence next to your CV line and one thing to do, followed by how your CV's dates were read.
-6. **Suggests CV edits and checks each one.** "Optimize my CV" suggests rewording, skills and a summary, aimed at requirements you meet in different words. Each suggestion is checked by code, then by a separate model call. Anything the CV does not back is marked unsupported and cannot be accepted. A three-pass gate then refuses edits that are backed but not viable (evidence outside the posting's window, or a hidden barrier that no rewording can fix), with the reason.
+6. **Suggests CV edits and checks each one.** "Improve my CV" suggests rewording, skills and a summary, aimed at requirements you meet in different words. Each suggestion is checked by code, then by a separate model call. Anything the CV does not back is marked unsupported and cannot be accepted. A three-pass gate then refuses edits that are backed but not viable (evidence outside the posting's window, or a hidden barrier that no rewording can fix), with the reason.
 7. **You review.** Accept or reject each suggestion. You can edit one, and the edited version is checked again.
 8. **Builds the new CV.** Only accepted, verified changes are applied, in code. An agent may reorder sections and items, but it cannot write text. You get a DOCX and a PDF, and the report shows keyword coverage before and after.
 
@@ -74,7 +76,7 @@ In the review, the Kubernetes edit is refused as not viable instead of rewording
 - **No invented experience.** Each rewrite passes code checks, then an independent verifier that does not see the rewriter's reasoning, then your review. An unsupported rewrite cannot be accepted. The misses are reported below.
 - **A published, explainable score.** The weights and rules are in [docs/scoring.md](docs/scoring.md). Every point traces back to one requirement and its status.
 - **Matching by meaning.** A model matches requirements to CV lines by meaning, not only by exact words. If the model skips a requirement or fails, the code falls back to exact matches.
-- **Cheap and honest.** Every call runs on Claude Haiku 5.5, a low-cost model, and the input limits keep each prompt far below 100K tokens, past which it costs five times as much. Identical model calls reuse a stored answer, and the text is normalized first, so extra spaces or blank lines never change the result; the built-in samples replay answers pinned from a real run, so they always give the same report. A full run, from the report to the rebuilt CV, costs about one cent. The score is marked indicative, and this README reports the misses.
+- **Cheap and honest.** Every call runs on Claude Haiku 5.5, a low-cost model, and the input limits keep each prompt far below 100K tokens, past which it costs five times as much. Identical model calls reuse a stored answer, and the text is normalized first, so extra spaces or blank lines never change the result; the built-in samples replay answers pinned from a real run and are analysed as of the day of that run, so they always give the same report. A full run, from the report to the rebuilt CV, costs about one cent. The score is marked indicative, and this README reports the misses.
 
 Match scores and CV suggestions already exist in other tools. The six points above are where BackedCV differs.
 
@@ -98,6 +100,7 @@ The backend is a FastAPI app. Each analysis runs as one LangGraph graph, and it 
 
 - Model calls use Claude Haiku 5.5 with structured outputs, so each answer follows a fixed schema. One setting per tier (`BACKEDCV_MODEL_FAST`, `BACKEDCV_MODEL_STRONG`) can move rewrites and their checks to a bigger model.
 - The score is computed in code from published weights. The model never computes it.
+- A check takes about 10 to 25 seconds, most of it the model reading the posting. The CV and the posting are read at the same time; then the matching, the posting review and the barrier screen run side by side.
 - Analyses are stored in SQLite and deleted after 24 hours (see [Privacy and limits](#privacy-and-limits)).
 
 Details: [docs/architecture.md](docs/architecture.md) (graph, model calls, API, the no-invention pipeline) and [docs/scoring.md](docs/scoring.md) (weights, rules, verdicts). The decisions behind the design, and the options I rejected, are in [docs/decision-log.md](docs/decision-log.md).
@@ -147,6 +150,15 @@ Tests, from `backend/`:
 uv run pytest
 ```
 
+Frontend tests and linter, from `frontend/`:
+
+```
+npm test
+npm run lint
+```
+
+GitHub Actions runs all of them on every push ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
 ## Technologies and AI tools used
 
 - Python 3.12
@@ -158,6 +170,7 @@ uv run pytest
 - pdfplumber
 - python-docx
 - lxml
+- httpx
 - Typst
 - SQLite
 - React 19
@@ -165,19 +178,23 @@ uv run pytest
 - Vite
 - Docker
 - Render (live demo)
+- GitHub Actions (CI)
 - uv
 - ruff
 - pytest
+- Vitest
+- oxlint
 - Claude Code (AI coding assistant)
 
 ## Privacy and limits
 
 - LinkedIn job links are read as an anonymous visitor: no login, no cookies, and the link and the page are not stored. Limits: 20 reads per client address per rolling hour (`BACKEDCV_JOB_LINK_PER_HOUR`) and 500 per UTC day for all users (`BACKEDCV_JOB_LINK_PER_DAY`). If LinkedIn refuses the request or the job is gone, paste the text instead.
-- The uploaded file is not kept. The app reads it during the request and stores only the extracted text. An analysis (its CV text, posting and results) is deleted after 24 hours. A purge runs at startup and then every hour. `DELETE /api/analyses/{analysis_id}` deletes one earlier.
+- The uploaded file is not kept. The app reads it during the request and stores only the extracted text. An analysis (its CV text, posting and results) is deleted after 24 hours. A purge runs at startup and then every hour. The **Delete my data** button on the report, the review and the new CV screens deletes one at once (`DELETE /api/analyses/{analysis_id}`).
 - Anthropic receives the CV and posting text in each model call, with email addresses, phone numbers and links replaced by placeholders first: the model never sees them.
+- The page loads nothing from other sites: the font is served by the app, and every response carries a content security policy and other browser safety headers. API answers are sent with `Cache-Control: no-store`.
 - Model answers, which can contain text from your CV, are cached in `data/llm_cache.sqlite` (the `backedcv-data` volume under Docker Compose) so identical calls are not paid twice. The hourly purge deletes cached answers older than 24 hours, like analyses. Set `BACKEDCV_LLM_CACHE=false` to turn the cache off.
 - LangSmith tracing is optional. Without `BACKEDCV_ENV=prod`, traces include the CV and posting text. With it, inputs and outputs are hidden. The default is `dev`.
-- Limits: a CV file up to 4 MB and 6 PDF pages, with up to 30,000 characters of text; a posting of 150 to 20,000 characters. Model-using requests are limited to 30 per IP address per hour and 300 per UTC day for all users (defaults, set with `BACKEDCV_RATE_LIMIT_PER_HOUR` and `BACKEDCV_DAILY_MODEL_RUNS`).
+- Limits: a CV file up to 4 MB and 6 PDF pages, with up to 30,000 characters of text; a posting of 150 to 20,000 characters. Model-using requests are limited to 30 per IP address per hour and 300 per UTC day for all users (defaults, set with `BACKEDCV_RATE_LIMIT_PER_HOUR` and `BACKEDCV_DAILY_MODEL_RUNS`). Behind a proxy, `BACKEDCV_CLIENT_IP_HEADER` names the header that carries the caller's address (the demo uses Cloudflare's `CF-Connecting-IP`).
 - The score is indicative. It shows how your CV lines up with a posting under these published rules. No tool can reproduce a specific company's real ATS score.
 
 ## License

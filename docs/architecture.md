@@ -21,12 +21,11 @@ Built in `graph/builder.py`. Node logic is in `graph/nodes.py`, `graph/optimize_
 flowchart TD
     start_node((START)) --> prepare_cv
     start_node --> prepare_job
-    prepare_job --> review_posting
-    prepare_job --> screen_barriers
     prepare_cv --> plan_matching
     prepare_job --> plan_matching
+    plan_matching --> review_posting
+    plan_matching --> screen_barriers
     plan_matching -->|one per 8 requirements| match_chunk
-    plan_matching -->|no requirements| score_and_verdict
     match_chunk --> score_and_verdict
     review_posting -.->|R4 banners via state| score_and_verdict
     screen_barriers -.->|barrier items via state| score_and_verdict
@@ -46,10 +45,10 @@ flowchart TD
 
 - `prepare_cv`: `structure_cv` call (optional). Builds the parsed CV and the total-experience fact (`F01`). Runs parse checks and recruiter tips.
 - `prepare_job`: `extract_job` call. Locates quotes, sets the R1 and R2 flags and the R3 banner. Retry policy: 2 attempts.
-- `review_posting`: `review_posting` call (optional, never scored). Its R4 banners reach `score_and_verdict` through state, not an edge.
-- `screen_barriers`: `hidden_barriers` call (optional, never scored). Runs after `prepare_job`, beside `review_posting`. Its items reach `score_and_verdict` through state, not an edge. LangGraph waits for every node of a step, so the call ends before scoring.
-- `plan_matching`: waits for `prepare_cv` and `prepare_job`, then routes.
-- `match_chunk`: one `match_requirements` call per chunk of 8 requirements, in parallel. A failed chunk falls back to literal matching.
+- `review_posting`: `review_posting` call (optional, never scored). Its R4 banners reach `score_and_verdict` through state, not an edge. It runs in the same step as the matching chunks.
+- `screen_barriers`: `hidden_barriers` call (optional, never scored). Runs beside `review_posting` and the matching chunks, in the same step, so the slowest of them decides the wait. Its items reach `score_and_verdict` through state, not an edge. LangGraph ends a step only when every node in it has ended, so the call ends before scoring.
+- `plan_matching`: waits for `prepare_cv` and `prepare_job`, then starts the posting review, the barrier screen and the matching chunks together.
+- `match_chunk`: one `match_requirements` call per chunk of 8 requirements, in parallel. A failed chunk falls back to literal matching. A posting with no requirements sends one empty task through it, which calls no model.
 - `score_and_verdict`: `recompute`. Assessments with answers and recency applied, hidden risks, screening flags, score, verdict and badges.
 - `await_optimize`: **pause 1**. `interrupt({"stage": "report_ready"})`.
 - `suggest`: `suggest` call for requirements that are met but lack the posting's exact terms. Runs the deterministic guards on each rewrite. Skips requirements that are not viable (section 4).
@@ -60,19 +59,19 @@ flowchart TD
 - `build_cv`: applies accepted, verified rewrites in code. Then the order agent, or the standard section order.
 - `final_checks`: renders the PDF, reads it back, validates the document, compares keyword coverage before and after the build, and records fit. Writes `build_report`.
 
-Max concurrency is 4 (`run_config`).
+Max concurrency is 8 (`run_config`). Reading an uploaded PDF (before the graph) and the PDF read-back of `final_checks` run in worker threads, so they do not hold up other requests.
 
 ## 3. Model calls
 
 | Prompt (tier) | Node | Structured output | Model sees | Code does with the answer |
 |---|---|---|---|---|
 | `structure_cv` (fast) | `prepare_cv` | `CVStructureDraft`: section and entry line ranges, name and location line IDs | Numbered CV lines | Builds sections, entries and contact. Dates are parsed by code. If the call fails, matching still works on the lines. |
-| `extract_job` (fast, v2) | `prepare_job` | `JobExtractionDraft`: posting meta and requirements (quote, label, terms, category, importance, knockout type, minimum years, aliases) | The posting text | Locates each quote in the posting. Drops requirements whose quote is not found, unless they are knockouts or gates. Keeps only terms found in the quote, at most 3 terms and 3 aliases. |
+| `extract_job` (fast, v3) | `prepare_job` | `JobExtractionDraft`: posting meta and requirements (quote, label, terms, category, importance, knockout type, minimum years, aliases) | The posting text | Locates each quote in the posting. Drops requirements whose quote is not found, unless they are knockouts or gates. Keeps only terms found in the quote, at most 3 terms and 3 aliases. |
 | `review_posting` (fast) | `review_posting` | `PostingReviewDraft`: contradictions (quotes, explanation) and doubtful credentials (name, explanation) | Posting meta fields and `R03 \| sentence` rows | Each finding with a quote or a name becomes an R4 banner. If the call fails, there are no R4 banners. |
 | `hidden_barriers` (fast) | `screen_barriers` | `HiddenBarriersDraft`: up to 8 items, each with kind, quote, explicit, place, window in years, requirement IDs, explanation, action and question | The posting as written, and one row per requirement (ID and quote) | Locates each quote in the posting and drops items whose quote is not found. Keeps known requirement IDs, and window years only for recency (1 to 20). Merged with the code-pattern barriers (`domain/barriers.py`) in `recompute`. If the call fails, there are no model barriers. |
 | `match_requirements` (fast) | `match_chunk` | `MatchChunkDraft`: per requirement, a status (met, partial, missing, unknown), cited IDs, match type, rationale | 8 requirements (label, importance, category, quote, exact hits) and the numbered CV with facts | Keeps only cited IDs that exist and fills quotes from the CV. Applies the evidence rules. |
-| `suggest` (strong) | `suggest` | `SuggestionsDraft`: at most 8 rewrites (kind, target, new text, cited IDs, requirement IDs, rationale) | CV lines, facts, and the requirements that are met but lack exact terms | Maps targets to section IDs and runs the guards (section 4). If the call fails, no rewrites. |
-| `verify` (strong, v2) | `verify_batch` | `VerificationBatchDraft`: per rewrite, its claims with supporting IDs, a verdict per new term, an `uncertain` flag | The full CV with facts, and one section's pending rewrites (cited IDs, new terms, new text) | Sets verified or unsupported (section 4). If the call fails, all unsupported. |
+| `suggest` (strong) | `suggest` | `SuggestionsDraft`: at most 6 rewrites (kind, target, new text, cited IDs, requirement IDs, rationale) | CV lines, facts, and the requirements that are met but lack exact terms | Maps targets to section IDs and runs the guards (section 4). If the call fails, no rewrites. |
+| `verify` (strong, v3) | `verify_batch` | `VerificationBatchDraft`: per rewrite, its claims with supporting IDs, a verdict per new term, an `uncertain` flag | The full CV with facts, and one section's pending rewrites (cited IDs, new terms, new text) | Sets verified or unsupported (section 4). If the call fails, all unsupported. |
 | `build_cv` (fast, order agent) | `build_cv` | Tool calls: `move_section`, `reorder_items`, `finalize` | Outline of the built CV (section and item rows with first line and dates), posting title and requirement labels | Uses the order it sets, only if the last `finalize` returned ok (section 4). |
 
 - Tiers map to `BACKEDCV_MODEL_FAST` and `BACKEDCV_MODEL_STRONG`, both `claude-haiku-5-5` (Claude Haiku 5.5) by default. The order agent uses the fast model.
@@ -81,9 +80,9 @@ Max concurrency is 4 (`run_config`).
 - `hidden_barriers` (`llm/prompts/hidden_barriers.md`) has no fallback either, but its failure never fails the run: the code-pattern barriers and the recency rules still apply, and the error is recorded.
 - Effort per call (`output_config.effort`) comes from `config/models.toml`: `low` by default, `medium` for `suggest` and `high` for `verify`, the levels that did best in the live runs of 2026-10-23. Thinking is adaptive, the model's default, and each call allows up to 16,000 output tokens, thinking included. No temperature is sent: Claude Haiku 5.5 rejects sampling parameters.
 - Claude Haiku 5.5 bills a prompt of up to 100K tokens at a fifth of the price of a longer one. The input limits (at most 30,000 characters of CV text and 20,000 of posting) keep every call far below that: a 30,000-character CV, a 20,000-character posting and the longest prompt came to about 24,000 tokens (counted with the API on 2026-10-23). The cost of each call uses the matching rate card (`config/models.toml`), and a longer prompt is logged as a warning.
-- `extract_job` v2 splits a list of skills joined by "and" or commas into one requirement per item, each with its own terms and the same quote. "X or Y" stays one requirement.
+- `extract_job` splits a list of skills joined by "and" or commas into one requirement per item, each with its own terms and the same quote. "X or Y" stays one requirement.
 - Answers are cached in `llm_cache.sqlite` (`llm/cache.py`). An identical call (same model, effort, prompt version, schema and input) gets the stored answer back at no cost, and its usage record is marked `cached`. Only successful answers are stored, and a cache error counts as a miss. The setting is `BACKEDCV_LLM_CACHE` (default `true`); the evals turn it off.
-- **Pinned sample answers.** The built-in samples replay pinned answers from a real run, so the demo is reproducible: `backend/samples/pinned_answers.json` holds the model's own answers for both samples (`GET /api/samples` sent as the PDF upload, `GET /api/samples/hidden-risk` as pasted text), for the analysis and the optimize step, recorded by `scripts/pin_samples.py` against `claude-haiku-5-5` (`--check` replays them on an empty cache). They are read when the app builds its model, held in memory, never expire and are never overwritten. An entry whose prompt version or model no longer matches is ignored, and any other change to the input misses its key, so the call goes live. Any other CV is cached for 24 hours.
+- **Pinned sample answers.** The built-in samples replay pinned answers from a real run, so the demo is reproducible: `backend/samples/pinned_answers.json` holds the model's own answers for both samples (`GET /api/samples` sent as the PDF upload, `GET /api/samples/hidden-risk` as pasted text), for the analysis and the optimize step, recorded by `scripts/pin_samples.py` against `claude-haiku-5-5` (`--check` replays them on an empty cache). They are read when the app builds its model, held in memory, never expire and are never overwritten. An entry whose prompt version or model no longer matches is ignored, and any other change to the input misses its key, so the call goes live. Any other CV is cached for 24 hours. A built-in sample is analysed as of the day its answers were pinned (`api/sample_dates.py` sets the analysis date, `as_of`), because the model's input holds the CV's total experience, which counts months up to that date; any other analysis uses the day it was created.
 
 ## 4. No-invention pipeline
 
@@ -96,8 +95,9 @@ Max concurrency is 4 (`run_config`).
    - `fact_scope` (hard): a number that only a computed fact backs (`F` IDs are totals over the whole CV) must keep that scope. Only "years of experience" (optionally "total" or "professional" inside it) may follow it, and the clause must end there. "3.2 years of experience building pipelines" fails, because the total is tied to one role, skill or employer.
    - `no_posting_entities` (hard): the posting's job title or company does not appear outside the CV's entries (skipped for summaries).
    - `length` (hard): word limit, 2 times the original plus 30 (60 for a new summary).
+   - `no_placeholders` (hard): the placeholders that stand for contact details in the model's input (`[email]`, `[phone]`, `[link]`) never reach the CV.
    - `introduced_terms` (soft): lists new names missing from the CV. Never fails.
-4. **Independent verifier.** A separate `verify` call (prompt version 2, `llm/prompts/verify.md`) checks each rewrite that passed the hard guards. It does not see the generator's rationale. It splits the rewrite into claims and lists the IDs that prove each one. It judges each new name as a faithful name or a claim the CV does not show. Version 2 also treats `F` IDs as whole-CV totals and requires quantities and plurals to match.
+4. **Independent verifier.** A separate `verify` call (prompt version 3, `llm/prompts/verify.md`) checks each rewrite that passed the hard guards. It does not see the generator's rationale. It splits the rewrite into claims and lists the IDs that prove each one. It judges each new name as a faithful name or a claim the CV does not show. It also treats `F` IDs as whole-CV totals, requires quantities and plurals to match, and counts a qualifier added to a line as a claim of its own.
 5. **Status.** A rewrite ends as `verified` or `unsupported`. `pending` exists only between steps 3 and 4. It is verified only if every claim is supported, no new name adds a claim, the verifier is not uncertain, and it returned claims. Otherwise the first reason is shown.
 6. **Corroboration gate** (`gate_recency`, `gate_barriers`; `domain/corroboration.py`; no model call). Two more passes run on each verified rewrite. A hard failure in either sets its status to `refused`, with the reason. Pass 2, recent enough: if a requirement the rewrite covers has a stated window, one of its cited lines (or the target line) must have been used within it. Undated lines do not count. Without a window, a rewrite whose dated citations are all more than 6 years old only gets a note. Pass 3, not blocked: the requirements the rewrite covers must not carry a high risk from an eligibility barrier or a composite. The same two checks run per requirement before generation. A requirement whose evidence is outside its window, or that is met or partial and carries such a high risk, is not viable: `suggest` skips it, and `refusals` lists it with no suggestion ID.
 7. **User review.** Pause 2 takes the accepted and rejected IDs. Only rewrites that are both accepted and verified are applied. Accepting an unsupported or refused rewrite gets 422 `decisions_invalid`.
@@ -127,11 +127,13 @@ Max concurrency is 4 (`run_config`).
 | GET | `/api/analyses/{analysis_id}/cv.pdf` | Download the built CV as PDF, rendered on request | none |
 | DELETE | `/api/analyses/{analysis_id}` | Delete the analysis and its checkpoints (204). 409 while it is running | none |
 
-- `created` carries the analysis ID. `progress` carries `step` and `status` per graph step. `error` carries `code` (`analysis_failed`, `optimize_failed`, `build_failed`), `title` and `detail`. `report` carries the projection at pause 1. `suggestions` and `built` carry the projection at the end of their step.
+- `created` carries the analysis ID. `progress` carries `step` and `status` per graph step (and, once the posting is read, the requirement count and the first labels). `error` carries `code` (`analysis_failed`, `optimize_failed`, `build_failed`, or `model_unavailable` and `model_busy` when the model provider refused the request or could not be reached, with no detail), `title` and `detail`. `report` carries the projection at pause 1. `suggestions` and `built` carry the projection at the end of their step.
 - Projection `status` is `running`, `paused`, `done` or `stalled`. `stage` is `report_ready`, `review_ready`, `built` or null. The projection also carries `recency`, `hidden_risks`, `screening_flags` and `refusals`.
 - Errors are JSON `{code, title, detail}` with a 4xx status, for example `job_too_short`, `cv_unsupported_type`, `not_found` (404), `not_paused` and `wrong_stage` (409), `not_built` (409), `inputs_invalid` and `decisions_invalid` (422), `invalid_request` (422, malformed body). Job-link errors: `job_link_invalid` (422), `job_link_not_found` (404), `job_link_blocked` and `job_link_failed` (502, LinkedIn refused or could not be read), `job_link_rate_limited` and `job_link_daily_limit` (429).
 - One run per analysis at a time (`run_in_progress`, 409). The lock lives in memory, so run one server process.
 - **Rate limits** (`api/rate_limit.py`): `POST /analyses`, `POST .../optimize`, `POST .../build` and `POST .../suggestions/{suggestion_id}/verify` each count one model run, checked before the stream starts. Per client address, at most `BACKEDCV_RATE_LIMIT_PER_HOUR` (default 30) in a rolling hour; over that, 429 `rate_limited`. All clients together, at most `BACKEDCV_DAILY_MODEL_RUNS` (default 300) per UTC day; over that, 429 `daily_limit_reached`, which resets at midnight UTC. The 429 detail says how long to wait. The counts live in memory and start again with the process. Coverage preview and PATCH make no model call and are not limited. The job-link reads (`POST /api/job-link`, `api/routes/job_link.py`) have their own limits, separate from these: per client address, at most `BACKEDCV_JOB_LINK_PER_HOUR` (default 20) in a rolling hour, over that 429 `job_link_rate_limited`; all clients together, at most `BACKEDCV_JOB_LINK_PER_DAY` (default 500) per UTC day, over that 429 `job_link_daily_limit`.
+- **Client address.** The per-client limits count the address of the connection. Behind a proxy that writes the caller's address in a header of its own, `BACKEDCV_CLIENT_IP_HEADER` names it (the demo sets `CF-Connecting-IP`, which Cloudflare overwrites on every request); the left end of `X-Forwarded-For` can be set by the caller. Clients with no request in the last hour are dropped from the table.
+- **Response headers** (`api/headers.py`): every response carries a content security policy (only this site's own files; FastAPI's documentation pages are exempt), `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy`. API answers are `no-store`; the frontend files with a hash in their name are cached for a year.
 - In PATCH, sent `facts.answers` are merged into the stored answers: a sent answer replaces the stored one for the same ID (requirement or barrier), and the others stay. Other sent fact fields replace their old values, and sent `excluded_ids` or `included_flagged_ids` replace their lists. Unknown requirement IDs in those two lists get 422 `inputs_invalid` before anything is written.
 
 ## 6. Storage and privacy
@@ -142,7 +144,7 @@ Max concurrency is 4 (`run_config`).
 - **Model-answer cache:** `llm_cache.sqlite` in `BACKEDCV_DATA_DIR` keeps the model's answers, which can include parts of the CV and the posting, keyed by a hash of the input (section 3). Each row records when it was stored, and the hourly purge deletes rows older than 24 hours, like analyses.
 - **Model provider:** CV and posting text go to Anthropic in each model call. Before any call, email addresses, phone numbers and links in the CV are replaced by `[email]`, `[phone]` and `[link]` (`domain/redaction.py`), and the app keeps the original text.
 - **Tracing (LangSmith, optional):** turned on only by environment variables: `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` (see `.env.example`). `settings.py` loads the repo's `.env` into the environment without overriding real variables. LangChain reads the LANGSMITH_* variables itself. The app adds run names, `analysis_id` metadata and the prompt ID and version. LangChain sends run inputs and outputs by default. With `BACKEDCV_ENV=prod`, `main.py` sets `LANGSMITH_HIDE_INPUTS` and `LANGSMITH_HIDE_OUTPUTS` to `true` before any model call, unless the operator has set them, so traces hide the CV and posting text. In `dev` (the default) the app does not set them.
-- **Settings** (`settings.py`): `ANTHROPIC_API_KEY`, plus `BACKEDCV_` variables for `ENV`, `MODEL_FAST`, `MODEL_STRONG`, `LLM_CACHE`, `RATE_LIMIT_PER_HOUR`, `DAILY_MODEL_RUNS`, `DATA_DIR`, `FRONTEND_DIST` and `SAMPLES_DIR`.
+- **Settings** (`settings.py`): `ANTHROPIC_API_KEY`, plus `BACKEDCV_` variables for `ENV`, `MODEL_FAST`, `MODEL_STRONG`, `LLM_CACHE`, `RATE_LIMIT_PER_HOUR`, `DAILY_MODEL_RUNS`, `JOB_LINK_PER_HOUR`, `JOB_LINK_PER_DAY`, `CLIENT_IP_HEADER`, `DATA_DIR`, `FRONTEND_DIST` and `SAMPLES_DIR`.
 
 ## 7. Tech stack
 
@@ -152,6 +154,6 @@ Max concurrency is 4 (`run_config`).
 - **Reading CVs:** pdfplumber (PDF), python-docx and lxml (DOCX).
 - **Writing CVs:** Typst through the `typst` package (PDF, also used by `final_checks`). python-docx (DOCX, `render_docx`, used by the DOCX download).
 - **Tracing:** LangSmith (optional).
-- **Frontend:** React 19, TypeScript, Vite, oxlint.
-- **Tooling and deployment:** uv (locked dependencies), ruff and pytest (dev), Docker. `node:24-slim` builds the frontend; `python:3.12-slim` runs the app as user `app` on port 8000 with Uvicorn.
+- **Frontend:** React 19, TypeScript, Vite, oxlint, Vitest. The font (Public Sans, SIL Open Font License) is served by the app.
+- **Tooling and deployment:** uv (locked dependencies), ruff and pytest (dev), Docker, GitHub Actions (tests and linters on every push; a scheduled request keeps the demo awake during the day). `node:24-slim` builds the frontend; `python:3.12-slim` runs the app as user `app` on port 8000 with Uvicorn.
 - **License:** MIT.
