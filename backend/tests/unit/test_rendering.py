@@ -10,7 +10,7 @@ from backedcv.domain.document_diff import document_from_cv
 from backedcv.domain.models import CVDocument, CVLine, DocContact, DocItem, DocLine, DocSection
 from backedcv.ingestion import read_cv
 from backedcv.llm.drafts import CVStructureDraft, SectionDraft
-from backedcv.rendering import render_docx, render_pdf, roundtrip_check
+from backedcv.rendering import LAYOUTS, fit_pdf, render_docx, render_pdf, roundtrip_check
 
 CURATED_CV = Path(__file__).resolve().parents[2] / "samples" / "curated" / "cv.pdf"
 HEADLINE = "Software engineer moving into AI engineering"
@@ -218,3 +218,57 @@ def test_roundtrip_reports_a_line_missing_from_the_pdf():
 
     assert not ok
     assert issues == ["This line was never rendered"]
+
+
+def _long_cv(bullets: int) -> CVDocument:
+    """One job with many one-line bullets, to fill more than a page."""
+    lines = [_line("Data Engineer, Acme Corp, Jan 2020 – Present")]
+    lines += [
+        _line(f"Built pipeline number {i} for the analytics team in Python and SQL", "bullet")
+        for i in range(bullets)
+    ]
+    experience = DocSection(
+        id="experience",
+        type="experience",
+        heading="Experience",
+        items=[DocItem(id="job-1", lines=lines)],
+    )
+    return CVDocument(contact=DocContact(name="José Muñoz"), sections=[experience])
+
+
+def test_the_standard_layout_is_used_without_a_page_limit():
+    fitted = fit_pdf(_cv())
+
+    assert (fitted.pages, fitted.fits, fitted.layout) == (1, True, LAYOUTS[0])
+
+
+def test_a_page_limit_tightens_the_layout_until_the_cv_fits():
+    doc = _long_cv(60)
+
+    standard = fit_pdf(doc)
+    fitted = fit_pdf(doc, max_pages=1)
+
+    assert standard.pages == 2
+    assert (fitted.pages, fitted.fits) == (1, True)
+    assert fitted.layout != LAYOUTS[0]
+    assert roundtrip_check(fitted.pdf, doc)[0] is True
+
+
+def test_a_cv_too_long_for_the_limit_comes_back_whole_and_marked():
+    doc = _long_cv(200)
+
+    fitted = fit_pdf(doc, max_pages=1)
+
+    assert fitted.fits is False
+    assert fitted.pages > 1
+    assert fitted.layout == LAYOUTS[-1]
+    assert roundtrip_check(fitted.pdf, doc)[0] is True  # nothing is cut
+
+
+def test_the_docx_takes_the_text_size_and_margins_of_the_layout():
+    tight = LAYOUTS[-1]
+
+    document = docx.Document(io.BytesIO(render_docx(_cv(), tight)))
+
+    assert document.styles["Normal"].font.size == Pt(tight.font_size)
+    assert document.sections[0].left_margin == Inches(tight.margin)

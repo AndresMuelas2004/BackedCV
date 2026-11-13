@@ -5,6 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import InMemorySaver
 
+from backedcv.api.routes.downloads import download_name
+from backedcv.domain.models import CVDocument, DocContact
 from backedcv.main import create_app
 from tests.fakes import CV_TEXT, JOB_TEXT
 from tests.fakes_optimize import FakeOptimizeLLM
@@ -59,10 +61,10 @@ def test_the_built_cv_downloads_as_docx_and_pdf(client):
     assert docx.status_code == 200
     assert docx.content.startswith(b"PK")
     assert docx.headers["content-type"] == DOCX_TYPE
-    assert docx.headers["content-disposition"] == 'attachment; filename="cv-backedcv.docx"'
+    assert docx.headers["content-disposition"] == 'attachment; filename="Jane-Doe-CV.docx"'
     assert pdf.status_code == 200
     assert pdf.content.startswith(b"%PDF")
-    assert pdf.headers["content-disposition"] == 'attachment; filename="cv-backedcv.pdf"'
+    assert pdf.headers["content-disposition"] == 'attachment; filename="Jane-Doe-CV.pdf"'
 
 
 def test_downloads_of_an_unknown_analysis_are_404(client):
@@ -96,3 +98,45 @@ def test_delete_is_refused_while_a_run_holds_the_analysis(client):
 
     assert (response.status_code, response.json()["code"]) == (409, "run_in_progress")
     assert client.get(f"/api/analyses/{analysis_id}").status_code == 200
+
+
+def test_the_layout_says_how_many_pages_the_cv_takes(client):
+    analysis_id = _built(client)
+
+    layout = client.get(f"/api/analyses/{analysis_id}/cv-layout").json()
+    limited = client.get(f"/api/analyses/{analysis_id}/cv-layout", params={"max_pages": 1}).json()
+
+    assert layout == {
+        "pages": 1,
+        "max_pages": None,
+        "fits": True,
+        "font_size": 10.5,
+        "standard_font_size": 10.5,
+    }
+    assert (limited["max_pages"], limited["fits"]) == (1, True)
+
+
+def test_both_downloads_take_a_page_limit_and_refuse_a_wrong_one(client):
+    analysis_id = _built(client)
+
+    pdf = client.get(f"/api/analyses/{analysis_id}/cv.pdf", params={"max_pages": 1})
+    docx = client.get(f"/api/analyses/{analysis_id}/cv.docx", params={"max_pages": 2})
+    refused = client.get(f"/api/analyses/{analysis_id}/cv.pdf", params={"max_pages": 9})
+
+    assert (pdf.status_code, docx.status_code) == (200, 200)
+    assert (refused.status_code, refused.json()["code"]) == (422, "invalid_request")
+
+
+def test_the_layout_needs_a_built_cv(client):
+    analysis_id = _analysis_id(client)
+
+    response = client.get(f"/api/analyses/{analysis_id}/cv-layout")
+
+    assert (response.status_code, response.json()["code"]) == (409, "not_built")
+
+
+def test_the_download_is_named_after_the_candidate():
+    named = CVDocument(contact=DocContact(name="José Muñoz-Peña"))
+
+    assert download_name(named, "pdf") == "Jose-Munoz-Pena-CV.pdf"
+    assert download_name(CVDocument(), "docx") == "CV.docx"

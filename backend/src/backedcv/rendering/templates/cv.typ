@@ -3,6 +3,13 @@
 // The document arrives as JSON in sys.inputs.data (see pdf_writer.py), so strings need no escaping.
 
 #let cv = json(bytes(sys.inputs.data))
+// Text size (pt), page margin (in) and line spacing (em) arrive with the document, see
+// pdf_writer.py; the standard layout applies when they are left out.
+#let layout = json(bytes(sys.inputs.at(
+  "layout",
+  default: "{\"font_size\": 10.5, \"margin\": 0.7, \"leading\": 0.6}",
+)))
+#let base = layout.font_size * 1pt
 #let name = cv.contact.name
 #let muted = rgb("#566170") // the app's muted text colour, also used for the rules
 
@@ -21,14 +28,14 @@
 }
 
 #set document(title: if name != none { name } else { "CV" })
-#set page(paper: "a4", margin: 0.7in)
-#set text(font: "Libertinus Serif", size: 10.5pt, ligatures: false, hyphenate: false)
-#set par(leading: 0.6em, spacing: 0.6em)
+#set page(paper: "a4", margin: layout.margin * 1in)
+#set text(font: "Libertinus Serif", size: base, ligatures: false, hyphenate: false)
+#set par(leading: layout.leading * 1em, spacing: layout.leading * 1em)
 #set smartquote(enabled: false)
 #set list(marker: [•], indent: 0.8em, body-indent: 0.5em)
 
 #if name != none [
-  #block(below: 0.6em)[#text(size: 18pt, weight: "bold")[#name]]
+  #block(below: 0.6em)[#text(size: base * 1.7, weight: "bold")[#name]]
 ]
 
 #if cv.contact.headline != none [
@@ -51,7 +58,7 @@
       #stack(
         dir: ttb,
         spacing: 0.3em,
-        text(size: 11.5pt, weight: "bold")[#section.heading],
+        text(size: base * 1.1, weight: "bold")[#section.heading],
         line(length: 100%, stroke: 0.5pt + muted),
       )
     ]
