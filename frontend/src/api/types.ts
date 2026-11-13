@@ -191,6 +191,7 @@ export interface YearsCheck {
 
 export interface CandidateFacts {
   answers: Record<string, boolean> // requirement ID -> yes (true) or no (false)
+  statements?: Record<string, string> // requirement ID -> the candidate's own words about experience the CV leaves out
   work_authorization: string[] | null
   needs_sponsorship: boolean | null
   location: string | null
@@ -249,7 +250,7 @@ export interface Verdict {
 
 // Suggestions and review
 
-export type SuggestionKind = 'align_wording' | 'add_skill' | 'tailor_summary'
+export type SuggestionKind = 'align_wording' | 'add_skill' | 'tailor_summary' | 'add_line'
 
 // "refused": backed by the CV but not viable for the posting. It can never be accepted.
 export type VerificationStatus = 'pending' | 'verified' | 'unsupported' | 'refused'
@@ -279,8 +280,8 @@ export interface Verification {
   passes?: GatePass[]
 }
 
-// A proposed CV change. `target` is a line ID (align_wording) or a section ID (add_skill,
-// tailor_summary). `before` is null when a line is added.
+// A proposed CV change. `target` is a line ID (align_wording), a section ID (add_skill,
+// tailor_summary) or an entry ID (add_line). `before` is null when a line is added.
 export interface Suggestion {
   id: string // S01, S02, ...
   kind: SuggestionKind
@@ -292,6 +293,7 @@ export interface Suggestion {
   introduced_terms: string[]
   covers_requirement_ids: string[]
   edited_by_user: boolean
+  source?: 'cv' | 'candidate' // "candidate": written from what the candidate said, not from a CV line
   verification: Verification
 }
 
@@ -362,10 +364,26 @@ export interface BuildReport {
   coverage_before: number | null
   coverage_after: number | null
   fit: number | null
+  fit_after?: number | null // Fit of the new CV when it holds lines the candidate added
   roundtrip_ok: boolean | null
   roundtrip_issues: string[]
   built_by: 'agent' | 'fallback'
   validation_errors: string[]
+}
+
+// How many pages the built CV takes, and whether it fits the page limit that was asked.
+export interface CvLayout {
+  pages: number
+  max_pages: number | null
+  fits: boolean
+  font_size: number
+  standard_font_size: number
+}
+
+// A statement of the candidate from which no line was written, with the reason.
+export interface SkippedStatement {
+  requirement_id: string
+  reason: string
 }
 
 // Screening risks, recency and the gate
@@ -502,6 +520,7 @@ export interface AnalysisReport {
   recency?: Record<string, RecencyCheck>
   refusals?: Refusal[]
   suggestions: Suggestion[]
+  skipped_statements?: SkippedStatement[]
   decisions: ReviewDecisions | null
   document: CVDocument | null
   build_report: BuildReport | null

@@ -37,6 +37,9 @@ export interface PriorityItem {
   pointsLost: number
   required: boolean
   order: number // posting order
+  requirementId: string | null // the requirement behind the item, when it is exactly one
+  canTell: boolean // the candidate can say, in their own words, that they have done this
+  statement: string | null // what the candidate already told us about it
 }
 
 const TIER_RANK: Record<Tier, number> = { rule_out: 0, serious: 1, improve: 2 }
@@ -119,6 +122,12 @@ const MUST_HAVE_TAGS: Partial<Record<Category, string>> = {
   language: 'Must-have · language',
 }
 
+// Requirements the candidate can back in their own words: skills and duties, never the screening
+// questions. The same rule as the backend (domain/statements.py).
+const TELLABLE: ReadonlySet<Category> = new Set<Category>(['hard_skill', 'soft_skill', 'other'])
+const TOLD_ACTION =
+  'Press "Improve my CV": we turn your words into a CV line, check it against them, and you decide.'
+
 interface Evidence {
   quote: string
   source: string | null
@@ -127,6 +136,7 @@ interface Evidence {
 interface Context {
   analysis: AnalysisReport
   answers: Record<string, boolean>
+  statements: Record<string, string>
   requirements: Map<string, Requirement>
   order: Map<string, number>
   pointsLost: Map<string, number>
@@ -195,6 +205,9 @@ export function buildPriorities(analysis: AnalysisReport): PriorityItem[] {
       pointsLost: context.pointsLost.get(req.id) ?? 0,
       required: req.importance === 'required',
       order: context.order.get(req.id) ?? 999,
+      requirementId: null,
+      canTell: false,
+      statement: null,
     })
   }
 
@@ -217,6 +230,9 @@ export function buildPriorities(analysis: AnalysisReport): PriorityItem[] {
       pointsLost: 0,
       required: false,
       order: 2000 + index,
+      requirementId: null,
+      canTell: false,
+      statement: null,
     })
   })
 
@@ -270,6 +286,7 @@ function makeContext(analysis: AnalysisReport): Context {
   for (const [id, value] of Object.entries(analysis.facts.answers ?? {})) {
     if (typeof value === 'boolean') answers[id] = value
   }
+  const statements = analysis.facts.statements ?? {}
   const unanswered = new Set<string>()
   for (const assessment of Object.values(analysis.assessments)) {
     if (assessment.question && assessment.status === 'unknown' && !(assessment.requirement_id in answers)) {
@@ -282,7 +299,18 @@ function makeContext(analysis: AnalysisReport): Context {
     }
   }
 
-  return { analysis, answers, requirements, order, pointsLost, lineText, lineSource, labels, unanswered }
+  return {
+    analysis,
+    answers,
+    statements,
+    requirements,
+    order,
+    pointsLost,
+    lineText,
+    lineSource,
+    labels,
+    unanswered,
+  }
 }
 
 // A risk inside an open combined risk counts at the combined risk's level when that is higher.
@@ -360,6 +388,9 @@ function riskItem(context: Context, risk: HiddenRisk, level: RiskLevel, linked: 
     pointsLost: linked.reduce((sum, id) => sum + (context.pointsLost.get(id) ?? 0), 0),
     required: reqs.length === 0 || reqs.some((req) => req.importance === 'required'),
     order: Math.min(999, ...linked.map((id) => context.order.get(id) ?? 999)),
+    requirementId: null,
+    canTell: false,
+    statement: null,
   }
 }
 
@@ -378,6 +409,16 @@ type Kind =
   | 'unclear'
   | 'preferred_missing'
   | 'preferred_partial'
+
+// The gaps a sentence from the candidate can close.
+const TELL_KINDS: ReadonlySet<Kind> = new Set<Kind>([
+  'missing',
+  'partial',
+  'unclear',
+  'too_old',
+  'preferred_missing',
+  'preferred_partial',
+])
 
 function classify(
   context: Context,
@@ -536,20 +577,26 @@ function requirementItem(
       break
   }
 
+  const canTell = TELLABLE.has(req.category) && req.knockout_type === null && TELL_KINDS.has(kind)
+  const statement = canTell ? (context.statements[req.id] ?? null) : null
+
   return {
     key: `req-${req.id}`,
     tier,
-    tag,
+    tag: statement ? `${tag} · you told us` : tag,
     title,
     why,
     jobQuote: quoteOf(req),
     cvQuote: evidence?.quote ?? null,
     cvSource: evidence?.source ?? null,
-    action,
+    action: statement ? TOLD_ACTION : action,
     answeredNo: kind === 'gate_no' || kind === 'years_no',
     pointsLost: context.pointsLost.get(req.id) ?? 0,
     required: req.importance === 'required',
     order: context.order.get(req.id) ?? 999,
+    requirementId: req.id,
+    canTell,
+    statement,
   }
 }
 

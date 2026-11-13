@@ -18,6 +18,7 @@ function report(
   rows: Row[],
   answers: Record<string, boolean> = {},
   warnings: object[] = [],
+  statements: Record<string, string> = {},
 ): AnalysisReport {
   const value = {
     hidden_risks: [],
@@ -26,7 +27,7 @@ function report(
     excluded_ids: [],
     recency: {},
     cv: null,
-    facts: { answers },
+    facts: { answers, statements },
     job: {
       requirements: rows.map((row) => ({
         id: row.id,
@@ -131,5 +132,39 @@ describe('buildPriorities', () => {
 
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ key: 'parse-0', tier: 'improve', tag: 'How your CV reads' })
+  })
+
+  it('lets the candidate speak for a missing skill, but not for a screening question', () => {
+    const items = buildPriorities(
+      report([
+        { id: 'R01', label: 'Kubernetes', status: 'missing' },
+        {
+          id: 'R02',
+          label: 'US work authorization',
+          status: 'unknown',
+          category: 'work_authorization',
+          knockout: 'work_authorization',
+          question: 'Are you authorized to work in the US?',
+        },
+        { id: 'R03', label: 'Bachelor degree', status: 'missing', category: 'education' },
+      ]),
+    )
+    const byKey = new Map(items.map((item) => [item.key, item]))
+
+    expect(byKey.get('req-R01')?.canTell).toBe(true)
+    expect(byKey.get('req-R02')?.canTell).toBe(false)
+    expect(byKey.get('req-R03')?.canTell).toBe(false)
+  })
+
+  it('shows what the candidate told us on the item', () => {
+    const [item] = buildPriorities(
+      report([{ id: 'R01', label: 'Kubernetes', status: 'missing' }], {}, [], {
+        R01: 'I ran our API on Kubernetes at Acme.',
+      }),
+    )
+
+    expect(item.statement).toBe('I ran our API on Kubernetes at Acme.')
+    expect(item.tag).toBe('Must-have skill · you told us')
+    expect(item.action).toContain('Improve my CV')
   })
 })

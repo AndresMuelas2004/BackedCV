@@ -828,3 +828,38 @@
     padding: 0.875rem 1rem;
   }
 }
+
+/* The candidate's own words about a gap ("Have you done this?"). */
+.rp-tell {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.rp-tell-label {
+  font-weight: 600;
+}
+
+.rp-tell textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  resize: vertical;
+  min-height: 76px;
+}
+
+.rp-tell-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.rp-tell-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

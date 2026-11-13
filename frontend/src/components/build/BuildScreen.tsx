@@ -1,5 +1,6 @@
-import { cvDownloadUrl } from '../../api/client'
-import type { AnalysisReport, BuildReport, DiffLine } from '../../api/types'
+import { useEffect, useState } from 'react'
+import { cvDownloadUrl, getCvLayout } from '../../api/client'
+import type { AnalysisReport, BuildReport, CvLayout, DiffLine } from '../../api/types'
 import { CitedText } from '../CitationTag'
 import HowComputed from '../HowComputed'
 import ScoreValue from '../review/ScoreValue'
@@ -12,7 +13,21 @@ interface BuildScreenProps {
   onDelete: () => void
 }
 
+// Page limits offered for the new CV. The server tightens text and margins to fit, and never cuts.
+const PAGE_CHOICES: readonly { value: number | null; label: string }[] = [
+  { value: null, label: 'Any length' },
+  { value: 1, label: '1 page' },
+  { value: 2, label: '2 pages' },
+]
+
+type LayoutState =
+  | { status: 'loading' }
+  | { status: 'ready'; layout: CvLayout }
+  | { status: 'failed' }
+
 export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildScreenProps) {
+  const [maxPages, setMaxPages] = useState<number | null>(null)
+  const layout = useCvLayout(analysis.analysis_id, maxPages)
   const report = analysis.build_report
   if (!report) {
     return (
@@ -31,6 +46,8 @@ export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildSc
 
   const coverageBefore = report.coverage_before ?? analysis.score?.coverage ?? null
   const fit = report.fit ?? analysis.score?.fit ?? null
+  const fitAfter = report.fit_after ?? null
+  const fitRaised = fitAfter !== null && fit !== null && fitAfter !== fit
   const titles = new Map<string, string>(
     (analysis.document?.sections ?? []).map((section): [string, string] => [section.id, section.heading]),
   )
@@ -67,13 +84,40 @@ export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildSc
 
         <section className="build-fact" aria-labelledby="fit-title">
           <h3 id="fit-title">Fit</h3>
-          <p>
-            <span className="fit-value">
-              <ScoreValue value={fit} />
-            </span>{' '}
-            <span className="fit-status">(unchanged)</span>
-          </p>
-          <p className="screen-note">Rewording cannot add experience, so fit stays the same.</p>
+          {fitRaised ? (
+            <>
+              <div className="compare">
+                <div className="compare-item">
+                  <span className="compare-label">Before</span>
+                  <span className="compare-value">
+                    <ScoreValue value={fit} />
+                  </span>
+                </div>
+                <span className="compare-arrow" aria-hidden="true">
+                  →
+                </span>
+                <div className="compare-item">
+                  <span className="compare-label">After</span>
+                  <span className="compare-value">
+                    <ScoreValue value={fitAfter} />
+                  </span>
+                </div>
+              </div>
+              <p className="screen-note">
+                The lines you added show experience your old CV did not, so fit goes up.
+              </p>
+            </>
+          ) : (
+            <>
+              <p>
+                <span className="fit-value">
+                  <ScoreValue value={fit} />
+                </span>{' '}
+                <span className="fit-status">(unchanged)</span>
+              </p>
+              <p className="screen-note">Rewording cannot add experience, so fit stays the same.</p>
+            </>
+          )}
         </section>
 
         <section className="build-fact" aria-labelledby="check-title">
@@ -110,15 +154,46 @@ export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildSc
           )}
         </section>
 
+        <section className="build-fact" aria-labelledby="length-title">
+          <h3 id="length-title">Length</h3>
+          <fieldset className="page-choices">
+            <legend>Fit the CV into</legend>
+            {PAGE_CHOICES.map((choice) => (
+              <label key={choice.label} className="page-choice">
+                <input
+                  type="radio"
+                  name="max-pages"
+                  checked={maxPages === choice.value}
+                  onChange={() => setMaxPages(choice.value)}
+                />
+                {choice.label}
+              </label>
+            ))}
+          </fieldset>
+          <p className="screen-note" aria-live="polite">
+            {lengthText(layout, maxPages)}
+          </p>
+          {maxPages !== null && (
+            <p className="screen-note">
+              The limit is exact for the PDF. The DOCX uses the same text size and margins, but Word
+              may break pages differently.
+            </p>
+          )}
+        </section>
+
         <div className="downloads">
           <a
             className="btn btn-primary"
-            href={cvDownloadUrl(analysis.analysis_id, 'docx')}
+            href={cvDownloadUrl(analysis.analysis_id, 'docx', maxPages)}
             download
           >
             Download DOCX
           </a>
-          <a className="btn btn-primary" href={cvDownloadUrl(analysis.analysis_id, 'pdf')} download>
+          <a
+            className="btn btn-primary"
+            href={cvDownloadUrl(analysis.analysis_id, 'pdf', maxPages)}
+            download
+          >
             Download PDF
           </a>
           <button type="button" className="btn btn-secondary" onClick={onStartOver}>
@@ -155,4 +230,42 @@ function countChanges(diff: DiffLine[]): string {
     `${count('removed')} removed`,
     `${count('unchanged')} unchanged`,
   ].join(', ')
+}
+
+// The length of the built CV for a page limit, asked again when the limit changes. A reply for
+// an outdated limit is dropped.
+function useCvLayout(analysisId: string, maxPages: number | null): LayoutState {
+  const [answer, setAnswer] = useState<{ key: number | null; state: LayoutState } | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getCvLayout(analysisId, maxPages, controller.signal)
+      .then((layout) => {
+        if (!controller.signal.aborted) {
+          setAnswer({ key: maxPages, state: { status: 'ready', layout } })
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setAnswer({ key: maxPages, state: { status: 'failed' } })
+      })
+    return () => controller.abort()
+  }, [analysisId, maxPages])
+
+  return answer !== null && answer.key === maxPages ? answer.state : { status: 'loading' }
+}
+
+function pagesText(count: number): string {
+  return `${count} ${count === 1 ? 'page' : 'pages'}`
+}
+
+function lengthText(state: LayoutState, maxPages: number | null): string {
+  if (state.status === 'loading') return 'Measuring the length...'
+  if (state.status === 'failed') return 'The length could not be measured.'
+  const { pages, fits, font_size: size, standard_font_size: standard } = state.layout
+  if (maxPages === null) return `Your new CV takes ${pagesText(pages)}.`
+  if (!fits) {
+    return `It does not fit in ${pagesText(maxPages)}: with the smallest text that still reads well it takes ${pagesText(pages)}. Nothing is cut, so shorten your CV or allow more pages.`
+  }
+  if (size === standard) return `It fits in ${pagesText(maxPages)} as it is.`
+  return `It fits in ${pagesText(maxPages)} with the text at ${size} pt instead of ${standard} pt. Nothing is cut.`
 }

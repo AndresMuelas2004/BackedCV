@@ -3,6 +3,7 @@ import type {
   BuildStep,
   CandidateFacts,
   CoveragePreview,
+  CvLayout,
   ErrorBody,
   HiddenRiskSample,
   InputsUpdate,
@@ -246,8 +247,29 @@ export async function runBuild(
   )
 }
 
-export function cvDownloadUrl(id: string, format: CvDownloadFormat): string {
-  return `${API_BASE}/analyses/${encodeURIComponent(id)}/cv.${format}`
+// `maxPages` fits the CV into that many pages (smaller text and margins, nothing cut); null: any length.
+export function cvDownloadUrl(
+  id: string,
+  format: CvDownloadFormat,
+  maxPages: number | null = null,
+): string {
+  const query = maxPages === null ? '' : `?max_pages=${maxPages}`
+  return `${API_BASE}/analyses/${encodeURIComponent(id)}/cv.${format}${query}`
+}
+
+// How many pages the built CV takes, and whether it fits a page limit. The signal cancels a stale
+// request.
+export async function getCvLayout(
+  id: string,
+  maxPages: number | null,
+  signal?: AbortSignal,
+): Promise<CvLayout> {
+  const query = maxPages === null ? '' : `?max_pages=${maxPages}`
+  const response = await send(`${API_BASE}/analyses/${encodeURIComponent(id)}/cv-layout${query}`, {
+    signal,
+  })
+  if (!response.ok) throw await readError(response)
+  return (await response.json()) as CvLayout
 }
 
 export async function deleteAnalysis(id: string): Promise<void> {

@@ -14,6 +14,7 @@ function lineNumber(id: string): number | null {
 }
 
 export function citationLabel(id: string): string {
+  if (/^U\d+$/.test(id)) return 'your words' // what the candidate told us about a requirement
   if (isFactId(id)) return COMPUTED_FACT_LABEL
   const number = lineNumber(id)
   return number === null ? 'Cited line' : `line ${number}`

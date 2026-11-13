@@ -1,14 +1,18 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
+import { describeError } from '../../lib/errors'
 import { TIER_LABELS, TIERS, type PriorityItem } from '../../lib/priorities'
 
 interface FixListProps {
   items: PriorityItem[]
+  busy: boolean // true while a request of the report is in flight
+  // Saves what the candidate says about a requirement; null removes it.
+  onTell: (requirementId: string, text: string | null) => Promise<void>
 }
 
 // How many items show before "Show more". Everything that could rule the candidate out always shows.
 const FIRST_ITEMS = 5
 
-export default function FixList({ items }: FixListProps) {
+export default function FixList({ items, busy, onTell }: FixListProps) {
   const [toggled, setToggled] = useState<Record<string, boolean>>({})
   const [showAll, setShowAll] = useState(false)
 
@@ -53,6 +57,8 @@ export default function FixList({ items }: FixListProps) {
                   number={index + 1}
                   open={open}
                   onToggle={() => setToggled((previous) => ({ ...previous, [item.key]: !open }))}
+                  busy={busy}
+                  onTell={onTell}
                 />
               </li>
             )
@@ -80,12 +86,14 @@ interface FixItemProps {
   number: number
   open: boolean
   onToggle: () => void
+  busy: boolean
+  onTell: (requirementId: string, text: string | null) => Promise<void>
 }
 
-function FixItem({ item, number, open, onToggle }: FixItemProps) {
+function FixItem({ item, number, open, onToggle, busy, onTell }: FixItemProps) {
   const panelId = `fix-${item.key}-panel`
   const titleId = `fix-${item.key}-title`
-  const hasDetail = item.jobQuote !== null || item.cvQuote !== null || item.action !== ''
+  const hasDetail = item.jobQuote !== null || item.cvQuote !== null || item.action !== '' || item.canTell
   return (
     <article className={`rp-item tier-${item.tier}`} aria-labelledby={titleId}>
       <div className="rp-item-head">
@@ -139,8 +147,100 @@ function FixItem({ item, number, open, onToggle }: FixItemProps) {
               <strong>What to do:</strong> <span>{item.action}</span>
             </p>
           )}
+          {item.canTell && item.requirementId !== null && (
+            <TellUs
+              key={item.statement ?? ''}
+              id={`fix-${item.key}-tell`}
+              saved={item.statement}
+              busy={busy}
+              onSave={(text) => onTell(item.requirementId as string, text)}
+            />
+          )}
         </div>
       )}
     </article>
+  )
+}
+
+interface TellUsProps {
+  id: string
+  saved: string | null // what the candidate already told us
+  busy: boolean
+  onSave: (text: string | null) => Promise<void>
+}
+
+const STATEMENT_MAX = 500 // the server's limit (domain/models/assessment.py)
+
+// The candidate says, in their own words, where and how they did what the CV leaves out. Only
+// these words can become a new CV line, and that line is checked against them.
+function TellUs({ id, saved, busy, onSave }: TellUsProps) {
+  const [text, setText] = useState(saved ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+
+  async function send(next: string | null) {
+    if (pending || busy) return
+    setPending(true)
+    setError(null)
+    try {
+      await onSave(next)
+    } catch (failure) {
+      setError(describeError(failure))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const next = text.trim()
+    if (next === '') {
+      setError('Write where and how you did it first.')
+      return
+    }
+    void send(next)
+  }
+
+  return (
+    <form className="rp-tell" onSubmit={submit} noValidate>
+      <label htmlFor={id} className="rp-tell-label">
+        {saved ? 'You told us' : 'Have you done this? Say where and how, in your own words.'}
+      </label>
+      <textarea
+        id={id}
+        rows={2}
+        maxLength={STATEMENT_MAX}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        placeholder="For example: At Acme I ran our API on Kubernetes for two years."
+        aria-invalid={error !== null}
+        aria-describedby={`${id}-hint`}
+      />
+      <p id={`${id}-hint`} className="rp-tell-hint">
+        Only what you write here can become a new line of your CV, and the line is checked against
+        your words. Leave it empty if you have not done it.
+      </p>
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="rp-tell-actions">
+        {/* aria-disabled, not disabled: a disabled button drops the keyboard focus it has. */}
+        <button type="submit" className="rp-btn rp-btn-secondary" aria-disabled={busy || pending}>
+          {pending ? 'Saving...' : saved ? 'Update' : 'Add it to my new CV'}
+        </button>
+        {saved && (
+          <button
+            type="button"
+            className="rp-btn rp-btn-secondary"
+            aria-disabled={busy || pending}
+            onClick={() => void send(null)}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </form>
   )
 }

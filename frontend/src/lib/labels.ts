@@ -54,6 +54,7 @@ export const SUGGESTION_KIND_LABELS: Record<SuggestionKind, string> = {
   align_wording: 'Align wording',
   add_skill: 'Add skill',
   tailor_summary: 'Tailor summary',
+  add_line: 'Add line',
 }
 
 // "composite" is a risk that combines several others.

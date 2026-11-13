@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { updateInputs } from '../../api/client'
 import type { AnalysisReport, RequirementAssessment } from '../../api/types'
 import { formatPoints, formatScore } from '../../lib/format'
 import { FLAG_LABELS, IMPORTANCE_LABELS, STATUS_LABELS } from '../../lib/labels'
@@ -68,6 +69,18 @@ export default function ReportView({
     setSelectedId(null)
   }
 
+  // Saves what the candidate says about one requirement (null removes it). The whole set is sent,
+  // because the server replaces it.
+  async function tell(requirementId: string, text: string | null) {
+    const statements = { ...(analysis.facts.statements ?? {}) }
+    if (text === null) delete statements[requirementId]
+    else statements[requirementId] = text
+    const next = await saving.track(() =>
+      updateInputs(analysis.analysis_id, { facts: { ...analysis.facts, statements } }),
+    )
+    onAnalysisChange(next)
+  }
+
   return (
     <div className="rp">
       {analysis.errors.length > 0 && (
@@ -88,7 +101,7 @@ export default function ReportView({
         onAnotherPosting={onAnotherPosting}
       />
 
-      <FixList items={priorities} />
+      <FixList items={priorities} busy={saving.busy} onTell={tell} />
 
       <Strengths analysis={analysis} />
 
@@ -218,10 +231,13 @@ function actionState(
       blockReason,
     }
   }
+  const told = Object.keys(analysis.facts.statements ?? {}).length > 0
   return {
     blocked: false,
     disabled: analysis.stage !== 'report_ready' || busy,
-    hint: 'Edits only where your CV already proves it. Each one is checked against your CV.',
+    hint: told
+      ? 'Edits where your CV already proves it, plus lines from what you told us. Each one is checked.'
+      : 'Edits only where your CV already proves it. Each one is checked against your CV.',
     blockReason,
   }
 }

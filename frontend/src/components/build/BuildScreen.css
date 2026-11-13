@@ -3,6 +3,27 @@
   gap: 1.25rem;
 }
 
+.page-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+}
+
+.page-choices legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-weight: 600;
+}
+
+.page-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .build-summary {
   display: grid;
   gap: 1.1rem;

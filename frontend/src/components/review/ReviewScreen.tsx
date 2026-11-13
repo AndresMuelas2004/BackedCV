@@ -3,6 +3,7 @@ import { previewCoverage, verifySuggestion } from '../../api/client'
 import type {
   AnalysisReport,
   CoveragePreview,
+  CvEntry,
   CvLine,
   CvSection,
   ReviewDecisions,
@@ -64,7 +65,10 @@ export default function ReviewScreen({
     (refusal) => refusal.suggestion_id === null || !refusedIds.has(refusal.suggestion_id),
   )
   const refusedItems = groupSuggestions(analysis, refused).flatMap((group) =>
-    group.suggestions.map((suggestion) => ({ suggestion, sectionTitle: group.title })),
+    group.suggestions.map((suggestion) => ({
+      suggestion,
+      sectionTitle: placeOf(suggestion, analysis, group.title),
+    })),
   )
   const hasRefused = refusals.length > 0 || refusedItems.length > 0
   // No suggestions, and the suggest step itself failed on the server: not the same as "none needed".
@@ -77,6 +81,11 @@ export default function ReviewScreen({
   const citations = new Map<string, string>()
   for (const line of analysis.cv?.lines ?? []) citations.set(line.id, line.text)
   for (const fact of analysis.cv?.facts ?? []) citations.set(fact.id, fact.text)
+  // What the candidate told us about a requirement is cited as U07 for requirement R07.
+  for (const [requirementId, text] of Object.entries(analysis.facts.statements ?? {})) {
+    citations.set(`U${requirementId.slice(1)}`, text)
+  }
+  const skipped = analysis.skipped_statements ?? []
 
   function decide(id: string, decision: Decision) {
     setDecisions((previous) => {
@@ -178,7 +187,7 @@ export default function ReviewScreen({
         </section>
       )}
 
-      {groups.length === 0 && !suggestFailed && !hasRefused && (
+      {groups.length === 0 && !suggestFailed && !hasRefused && skipped.length === 0 && (
         <section className="card">
           <p>No suggestions were found for this CV and posting.</p>
         </section>
@@ -195,7 +204,7 @@ export default function ReviewScreen({
                   decision={effectiveDecision(suggestion, decisions)}
                   requirementLabels={requirementLabels}
                   citations={citations}
-                  sectionTitle={group.title}
+                  sectionTitle={placeOf(suggestion, analysis, group.title)}
                   busy={saving.busy}
                   onDecide={(choice) => decide(suggestion.id, choice)}
                   onSaveEdit={(text) => checkEdit(suggestion.id, text)}
@@ -205,6 +214,20 @@ export default function ReviewScreen({
           </ul>
         </section>
       ))}
+
+      {skipped.length > 0 && (
+        <section className="card" aria-labelledby="skipped-title">
+          <h3 id="skipped-title">Not added from what you told us</h3>
+          <ul className="skipped-list">
+            {skipped.map((item) => (
+              <li key={item.requirement_id}>
+                <strong>{requirementLabels.get(item.requirement_id) ?? 'This requirement'}:</strong>{' '}
+                {item.reason}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {hasRefused && (
         <RefusedGroup
@@ -368,8 +391,10 @@ function groupSuggestions(analysis: AnalysisReport, list: Suggestion[]): Suggest
   const byKey = new Map<string, Suggestion[]>()
   for (const suggestion of list) {
     const key =
-      sectionIdFor(suggestion, sections) ??
-      (suggestion.kind === 'align_wording' ? 'other' : suggestion.target)
+      sectionIdFor(suggestion, sections, analysis.cv?.entries ?? []) ??
+      (suggestion.kind === 'align_wording' || suggestion.kind === 'add_line'
+        ? 'other'
+        : suggestion.target)
     byKey.set(key, [...(byKey.get(key) ?? []), suggestion])
   }
 
@@ -387,8 +412,16 @@ function groupSuggestions(analysis: AnalysisReport, list: Suggestion[]): Suggest
   return groups
 }
 
-// The CV section a suggestion changes: the one that holds its line, or the one it names.
-function sectionIdFor(suggestion: Suggestion, sections: CvSection[]): string | null {
+// The CV section a suggestion changes: the one that holds its line or its entry, or the one it names.
+function sectionIdFor(
+  suggestion: Suggestion,
+  sections: CvSection[],
+  entries: CvEntry[],
+): string | null {
+  if (suggestion.kind === 'add_line') {
+    const entry = entries.find((item) => item.id === suggestion.target)
+    return sections.find((section) => section.id === entry?.section_id)?.id ?? null
+  }
   const found =
     suggestion.kind === 'align_wording'
       ? sections.find(
@@ -398,6 +431,14 @@ function sectionIdFor(suggestion: Suggestion, sections: CvSection[]): string | n
         )
       : sections.find((section) => section.id === suggestion.target)
   return found?.id ?? null
+}
+
+// Where an added line goes, in words: "Experience, under Data Engineer at Acme Corp".
+function placeOf(suggestion: Suggestion, analysis: AnalysisReport, sectionTitle: string): string {
+  if (suggestion.kind !== 'add_line') return sectionTitle
+  const entry = analysis.cv?.entries.find((item) => item.id === suggestion.target)
+  const name = [entry?.title, entry?.organization].filter(Boolean).join(' at ')
+  return name ? `${sectionTitle}, under ${name}` : sectionTitle
 }
 
 function sectionTitle(section: CvSection, lines: CvLine[]): string {

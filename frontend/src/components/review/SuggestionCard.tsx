@@ -52,6 +52,7 @@ export default function SuggestionCard({
   const covers = suggestion.covers_requirement_ids.map((req) => requirementLabels.get(req) ?? req)
   const failedClaims = verification.claims.filter((claim) => !claim.ok)
   const chip = STATUS_CHIPS[status]
+  const told = suggestion.source === 'candidate' // written from what the candidate told us
 
   function startEdit() {
     setText(suggestion.after)
@@ -99,6 +100,7 @@ export default function SuggestionCard({
           </span>
         )}
         {suggestion.edited_by_user && <span className="chip chip-neutral">Edited by you</span>}
+        {told && <span className="chip chip-neutral">From what you told us</span>}
       </div>
 
       <ChangeDiff
@@ -114,12 +116,12 @@ export default function SuggestionCard({
 
       {suggestion.cited_refs.length > 0 && (
         <div className="cited">
-          <p className="suggestion-label">Based on your CV</p>
+          <p className="suggestion-label">{told ? 'Based on what you told us' : 'Based on your CV'}</p>
           <ul className="cited-list">
             {suggestion.cited_refs.map((ref) => (
               <li key={ref}>
                 <CitationTag id={ref} />
-                <span>{citations.get(ref) ?? 'Not found in your CV.'}</span>
+                <span>{citations.get(ref) ?? (told ? 'Your words were not found.' : 'Not found in your CV.')}</span>
               </li>
             ))}
           </ul>
@@ -129,7 +131,13 @@ export default function SuggestionCard({
       {!acceptable && (
         <div className="reason-box">
           <p>
-            <strong>{status === 'pending' ? 'Not checked yet.' : 'Not supported by your CV.'}</strong>
+            <strong>
+              {status === 'pending'
+                ? 'Not checked yet.'
+                : told
+                  ? 'Not supported by what you told us.'
+                  : 'Not supported by your CV.'}
+            </strong>
             {status !== 'pending' && (
               <>
                 {' '}
@@ -154,7 +162,13 @@ export default function SuggestionCard({
         </div>
       )}
 
-      {!acceptable && <p className="suggestion-note">Cannot be accepted until your CV supports it.</p>}
+      {!acceptable && (
+        <p className="suggestion-note">
+          {told
+            ? 'It cannot be accepted as it is. Edit it so that it says only what you told us.'
+            : 'Cannot be accepted until your CV supports it.'}
+        </p>
+      )}
 
       <div className="suggestion-actions">
         {acceptable && (
