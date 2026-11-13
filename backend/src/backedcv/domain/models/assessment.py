@@ -1,8 +1,8 @@
 """How well the CV covers each requirement."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 Status = Literal["met", "partial", "missing", "unknown"]
 MatchType = Literal["exact", "alias", "semantic", "inferred", "user_answer"]
@@ -34,11 +34,21 @@ class RequirementAssessment(BaseModel):
     years_check: YearsCheck | None = None  # minimum-years requirements, when the CV has dates
 
 
+STATEMENT_MAX_CHARS = 500  # one or two sentences
+STATEMENTS_MAX = 12
+Statement = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=STATEMENT_MAX_CHARS)
+]
+
+
 class CandidateFacts(BaseModel):
     """Optional answers that resolve knockout questions. They never enter the CV text."""
 
     # requirement or barrier ID -> yes (True) or no
     answers: dict[str, bool] = Field(default_factory=dict, max_length=300)
+    # Requirement ID -> what the candidate says, in their own words, about experience the CV
+    # leaves out. A new CV line can be written from it and is checked against these words.
+    statements: dict[str, Statement] = Field(default_factory=dict, max_length=STATEMENTS_MAX)
     work_authorization: list[str] | None = None  # countries
     needs_sponsorship: bool | None = None
     location: str | None = None

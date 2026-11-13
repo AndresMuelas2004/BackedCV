@@ -93,11 +93,15 @@ class ParsedCV(BaseModel):
     # True when a job date shows only the year or a job has no dates: the real total may be longer.
     total_is_minimum: bool = False
     dates_note: str | None = None  # one plain sentence saying why the total is a minimum
+    # U07 -> what the candidate said about requirement R07 (domain/statements.py). Filled only
+    # while lines written from those words are drafted and checked: no model reads it as CV text.
+    candidate_notes: dict[str, str] = Field(default_factory=dict)
 
     def texts_by_ref(self) -> dict[str, str]:
-        """Every citable reference (L and F IDs) mapped to its text."""
+        """Every citable reference (L, F and U IDs) mapped to its text."""
         refs = {line.id: line.text for line in self.lines}
         refs.update({fact.id: fact.text for fact in self.facts})
+        refs.update(self.candidate_notes)
         return refs
 
     def numbered(self, include_facts: bool = True) -> str:

@@ -1,6 +1,8 @@
 """Canned suggest and verify answers for the optimize step, on top of the analysis fakes."""
 
 from backedcv.llm.drafts_optimize import (
+    AdditionDraft,
+    AdditionsDraft,
     ClaimDraft,
     SuggestionDraft,
     SuggestionsDraft,
@@ -55,17 +57,20 @@ def _supports(row: str) -> VerificationDraft:
 
 
 class FakeOptimizeLLM(FakeLLM):
-    """FakeLLM that also answers suggest and verify. `inputs` keeps the data each of them got."""
+    """FakeLLM that also answers suggest, the lines written from the candidate's words, and verify.
+    `inputs` keeps the data each of them got."""
 
     def __init__(
         self,
         suggestions: list[SuggestionDraft] | None = None,
         barriers: list[BarrierDraft] | None = None,
+        additions: list[AdditionDraft] | None = None,
     ):
         super().__init__(barriers=barriers)
         if suggestions is None:
             suggestions = [FAITHFUL_REWORD, INVENTED_NUMBER, ADD_SKILL]
         self.suggestions = suggestions
+        self.additions = additions or []
         self.inputs: list[tuple[str, str]] = []
 
     async def run(self, prompt, data, schema, *, node):
@@ -81,4 +86,9 @@ class FakeOptimizeLLM(FakeLLM):
             rows = data.split("<suggestions>\n", 1)[1].split("\n</suggestions>", 1)[0]
             verifications = [_supports(row) for row in rows.splitlines()]
             return VerificationBatchDraft(verifications=verifications), _usage(node)
+        if schema is AdditionsDraft:
+            self.calls.append(node)
+            self.inputs.append((node, data))
+            self.received.append((node, data))
+            return AdditionsDraft(additions=self.additions), _usage(node)
         return await super().run(prompt, data, schema, node=node)

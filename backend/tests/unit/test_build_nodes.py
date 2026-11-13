@@ -281,3 +281,33 @@ def test_without_an_order_model_the_fallback_uses_the_standard_section_order():
     assert update["built_by"] == "fallback"
     doc = CVDocument.model_validate(update["document"])
     assert [section.id for section in doc.sections] == ["S03", "S04", "S01", "S02"]
+
+
+def test_a_line_the_candidate_added_raises_fit_in_the_build_report():
+    state = _state()
+    told = Suggestion(
+        id="S03",
+        kind="add_line",
+        target="E01",
+        after="Built internal services with FastAPI",
+        requirement_ids=["R02"],
+        cited_refs=["U02"],
+        source="candidate",
+        verification=Verification(status="verified"),
+    )
+    state["suggestions"].append(told.model_dump())
+    state["decisions"] = {"accepted": ["S03"], "rejected": []}
+    state = {**state, **_built(state)}
+
+    report = _checked(state)
+
+    assert (report.fit, report.fit_after) == (50.0, 100.0)
+    assert report.validation_errors == []
+    assert ("added", "S03") in [(d.status, d.origin) for d in report.diff]
+
+
+def test_fit_stays_the_same_without_a_line_from_the_candidate():
+    state = _state()
+    state = {**state, **_built(state)}
+
+    assert _checked(state).fit_after is None

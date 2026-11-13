@@ -27,6 +27,7 @@ from backedcv.domain.recency import apply_recency, check_recency, find_recency_r
 from backedcv.domain.rules.absurd import flags_by_requirement
 from backedcv.domain.rules.knockout import apply_facts
 from backedcv.domain.scoring import compute_score
+from backedcv.domain.statements import with_notes
 from backedcv.domain.verdict import compute_verdict
 from backedcv.llm.drafts import AssessmentDraft
 
@@ -64,6 +65,17 @@ def flagged_of(state: dict) -> dict[str, str]:
     return flags_by_requirement(
         [RequirementFlag.model_validate(f) for f in state.get("flags") or []]
     )
+
+
+def statements_of(state: dict) -> dict[str, str]:
+    """Requirement ID -> what the candidate said about it, from the stored facts."""
+    return CandidateFacts.model_validate(state.get("facts") or {}).statements
+
+
+def cv_of(state: dict) -> ParsedCV:
+    """The parsed CV with what the candidate said as citable notes (U07 for requirement R07):
+    the CV the optimize step checks its suggestions against."""
+    return with_notes(ParsedCV.model_validate(state["cv"]), statements_of(state))
 
 
 def _model_windows(barriers: list[BarrierItem]) -> list[RecencyRule]:

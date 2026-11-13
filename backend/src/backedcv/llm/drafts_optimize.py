@@ -47,6 +47,33 @@ class SuggestionsDraft(BaseModel):
     )
 
 
+class AdditionDraft(BaseModel):
+    statement_id: str = Field(description="The statement's ID exactly as given, e.g. 'U07'.")
+    kind: Literal["add_line", "add_skill", "none"] = Field(
+        description="add_line: one CV bullet under the job or project the statement names. "
+        "add_skill: only the skill's name, for the Skills section. none: the statement does not "
+        "say that the candidate has done it."
+    )
+    entry_id: str | None = Field(
+        description="For add_line, the ID (E...) of the job or project from <cv_entries>. "
+        "Null otherwise."
+    )
+    after: str = Field(
+        description="add_line: the bullet, at most 30 words, only what the statement says. "
+        "add_skill: only the skill's name. none: empty."
+    )
+    reason: str = Field(
+        description="For none only, for the user, in English: one plain sentence of at most "
+        "20 words on why nothing is added. No IDs. Empty for the other kinds."
+    )
+
+
+class AdditionsDraft(BaseModel):
+    additions: list[AdditionDraft] = Field(
+        description="One per statement given, in the same order."
+    )
+
+
 class ClaimDraft(BaseModel):
     text: str = Field(
         description="One atomic claim from `after`: a single skill, role, number, date, scope "

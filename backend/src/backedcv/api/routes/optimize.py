@@ -32,10 +32,10 @@ from backedcv.domain.corroboration import (
 )
 from backedcv.domain.guards import apply_guards
 from backedcv.domain.models import JobPosting, ParsedCV, ReviewDecisions, Suggestion, Verification
-from backedcv.domain.recency import line_last_used
+from backedcv.domain.recency import entry_last_used, line_last_used
 from backedcv.graph.builder import run_config
 from backedcv.graph.optimize_nodes import make_optimize_nodes
-from backedcv.graph.recompute import recency_of, risks_of, today_of
+from backedcv.graph.recompute import cv_of, recency_of, risks_of, today_of
 from backedcv.graph.state import merge_items_by_id
 from backedcv.llm.structured import StructuredLLM
 
@@ -247,13 +247,15 @@ async def _suggest_again(
         "usage": usage,
         "errors": [{"resolves": "suggest"}, *errors],
     }
+    if "skipped_statements" in found:
+        update["skipped_statements"] = found["skipped_statements"]
     gated = _corroborate(values, update)
     await graph.aupdate_state(config, gated, as_node="gate_barriers")
 
 
 async def _check_edit(llm: StructuredLLM, values: dict, row: dict, after: str) -> dict:
     """The state update for one edited suggestion: guards, verification, corroboration gate."""
-    cv = ParsedCV.model_validate(values["cv"])
+    cv = cv_of(values)  # with the candidate's statements, which a line written from them cites
     job = JobPosting.model_validate(values["job"])
     edited = Suggestion.model_validate(row).model_copy(
         update={"after": after, "edited_by_user": True, "verification": Verification()}
@@ -261,7 +263,7 @@ async def _check_edit(llm: StructuredLLM, values: dict, row: dict, after: str) -
     checked = apply_guards(edited, cv, job)
     if checked.verification.status == "pending":
         verify_batch = make_optimize_nodes(llm)["verify_batch"]
-        update = await verify_batch({"cv": values["cv"], "group": [checked.model_dump()]})
+        update = await verify_batch({"cv": cv.model_dump(), "group": [checked.model_dump()]})
     else:  # a hard guard failed: the model is not asked
         update = {"suggestions": [checked.model_dump()]}
     return _corroborate(values, update)
@@ -274,7 +276,8 @@ def _corroborate(values: dict, update: dict) -> dict:
     a suggestion and are kept."""
     cv = ParsedCV.model_validate(values["cv"])
     today = today_of(values)
-    last_used = line_last_used(cv, today)
+    # A line added to a job is as recent as the job, so entries are dated too.
+    last_used = {**line_last_used(cv, today), **entry_last_used(cv, today)}
     recency, risks = recency_of(values), risks_of(values)
     gated = []
     for row in update["suggestions"]:

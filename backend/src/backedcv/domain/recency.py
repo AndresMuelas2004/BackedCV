@@ -63,6 +63,17 @@ def line_last_used(cv: ParsedCV, today: date) -> dict[str, str]:
     return last_used
 
 
+def entry_last_used(cv: ParsedCV, today: date) -> dict[str, str]:
+    """Entry ID -> YYYY-MM of each dated job or project: a line added to an entry is as recent
+    as the entry itself."""
+    dated: dict[str, str] = {}
+    for entry in cv.entries:
+        month = _entry_month(entry, today) if entry.kind in DATED_KINDS else None
+        if month is not None:
+            dated[entry.id] = month
+    return dated
+
+
 def credential_lines(cv: ParsedCV) -> set[str]:
     """Lines of education entries and of education or certification sections."""
     lines = {i for e in cv.entries if e.kind == "education" for i in e.line_ids}

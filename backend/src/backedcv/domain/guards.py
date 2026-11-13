@@ -82,6 +82,8 @@ def _target_exists(s: Suggestion, cv: ParsedCV) -> bool:
         return s.target in {line.id for line in cv.lines}
     if s.kind == "add_skill":
         return s.target in {section.id for section in cv.sections} | {NEW_SKILLS}
+    if s.kind == "add_line":
+        return s.target in {entry.id for entry in cv.entries}
     summaries = {section.id for section in cv.sections if section.type == "summary"}
     return s.target in summaries | {NEW_SUMMARY}
 
@@ -220,7 +222,7 @@ def _original(s: Suggestion, cv: ParsedCV) -> str | None:
     """The text a suggestion replaces, read from the CV so that a generator cannot fake it."""
     if s.kind == "align_wording":
         return next((line.text for line in cv.lines if line.id == s.target), s.before)
-    if s.kind == "add_skill" or s.target == NEW_SUMMARY:
+    if s.kind in ("add_skill", "add_line") or s.target == NEW_SUMMARY:
         return None  # an added line, or a new summary, replaces nothing
     summary = next(
         (sec for sec in cv.sections if sec.id == s.target and sec.type == "summary"), None
@@ -295,7 +297,7 @@ def keyword_only(s: Suggestion, job: JobPosting) -> str | None:
     moving one or two words to make room for a posting term is still padding. `before` must
     already hold the original (apply_guards fills it).
     """
-    if s.kind == "add_skill" or not s.before:
+    if s.kind in ("add_skill", "add_line") or not s.before:
         return None
     before, after = _words(s.before), _words(s.after)
     matcher = SequenceMatcher(None, [k for k, _ in before], [k for k, _ in after], autojunk=False)

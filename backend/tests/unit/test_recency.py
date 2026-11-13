@@ -18,6 +18,7 @@ from backedcv.domain.recency import (
     apply_recency,
     band_for,
     check_recency,
+    entry_last_used,
     find_recency_rules,
     line_last_used,
     years_since,
@@ -369,3 +370,18 @@ def test_apply_recency_downgrades_to_missing_and_never_mutates_its_input():
     assert result["R01"].evidence is not assessments["R01"].evidence
     assert result["R02"].status == "met"
     assert result["R02"] is not assessments["R02"]
+
+
+def test_entries_are_dated_like_their_lines():
+    cv = ParsedCV(
+        lines=[CVLine(id="L001", text="Ran the platform")],
+        entries=[
+            CVEntry(
+                id="E01", section_id="S01", kind="job", start="2019-03", end="2021-06", line_ids=[]
+            ),
+            CVEntry(id="E02", section_id="S01", kind="job", start="2022-01", end="present"),
+            CVEntry(id="E03", section_id="S02", kind="education", start="2015", end="2019"),
+        ],
+    )
+
+    assert entry_last_used(cv, date(2026, 11, 13)) == {"E01": "2021-06", "E02": "2026-11"}

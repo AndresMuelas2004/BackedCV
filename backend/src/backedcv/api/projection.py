@@ -85,6 +85,7 @@ def project(
         "recency": values.get("recency") or {},
         "refusals": values.get("refusals") or [],
         "suggestions": values.get("suggestions") or [],
+        "skipped_statements": values.get("skipped_statements") or [],
         "decisions": values.get("decisions"),
         "document": values.get("document"),
         "build_report": values.get("build_report"),

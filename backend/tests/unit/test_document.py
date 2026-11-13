@@ -619,3 +619,42 @@ def test_move_and_reorder_reject_unknown_ids_and_bad_orders():
         reorder_items(doc, "S02", ["E01", "E09"])
     with pytest.raises(ValueError, match="exactly once"):
         reorder_items(doc, "S02", ["E01", "E01"])
+
+
+def _told_line(target: str) -> Suggestion:
+    return Suggestion(
+        id="S09",
+        kind="add_line",
+        target=target,
+        after="Ran the API on Kubernetes",
+        requirement_ids=["R01"],
+        cited_refs=["U01"],
+        source="candidate",
+        verification=Verification(status="verified"),
+    )
+
+
+def test_an_added_line_goes_to_the_end_of_its_entry():
+    cv = _cv()
+    first_job = next(entry for entry in cv.entries if entry.kind == "job")
+    added = _told_line(first_job.id)
+
+    doc = apply_suggestions(document_from_cv(cv), cv, [added], {"S09"})
+
+    item = next(i for section in doc.sections for i in section.items if i.id == first_job.id)
+    last = item.lines[-1]
+    assert (last.text, last.origin, last.kind) == ("Ran the API on Kubernetes", "S09", "bullet")
+    assert validate_document(doc, cv, [added], {"S09"}) == []
+    added_lines = [d.after for d in diff_document(cv, doc, [added]) if d.status == "added"]
+    assert added_lines == ["Ran the API on Kubernetes"]
+
+
+def test_an_added_line_without_its_entry_is_reported():
+    cv = _cv()
+    lost = _told_line("E99")
+
+    doc = apply_suggestions(document_from_cv(cv), cv, [lost], {"S09"})
+
+    assert validate_document(doc, cv, [lost], {"S09"}) == [
+        "Accepted line S09 has no entry to go under"
+    ]

@@ -56,6 +56,7 @@ class BuildReport(BaseModel):
     coverage_before: float | None = None
     coverage_after: float | None = None
     fit: float | None = None
+    fit_after: float | None = None  # Fit of the new CV when it holds lines the candidate added
     roundtrip_ok: bool | None = None
     roundtrip_issues: list[str] = Field(default_factory=list)
     built_by: Literal["agent", "fallback"] = "fallback"

@@ -48,6 +48,7 @@ class AnalysisState(TypedDict, total=False):
     # Optimize and build
     suggestions: Annotated[list[dict], merge_items_by_id]
     refusals: list[dict]  # not viable: requirements and refused suggestions
+    skipped_statements: list[dict]  # statements no line was written from, with the reason
     decisions: dict | None
     document: dict | None
     built_by: str | None

@@ -12,6 +12,7 @@ from backedcv.domain.models import (
     Requirement,
     Suggestion,
 )
+from backedcv.domain.statements import with_notes
 
 ORIGINAL = "Cut infrastructure costs by 35% using Docker and Kubernetes"
 FAITHFUL = "Reduced infrastructure costs by 35% using Docker and Kubernetes"
@@ -466,3 +467,40 @@ def test_a_placeholder_in_a_rewrite_makes_it_unsupported():
 
     assert result.verification.status == "unsupported"
     assert result.verification.reason == _guard(s, "no_placeholders").detail
+
+
+NOTED = with_notes(CV, {"R01": "At Acme Corp I ran 3 services on Kubernetes for two years."})
+
+
+def _added_line(after: str, target: str = "E01") -> Suggestion:
+    return Suggestion(
+        id="S09",
+        kind="add_line",
+        target=target,
+        after=after,
+        requirement_ids=["R01"],
+        cited_refs=["U01"],
+        source="candidate",
+    )
+
+
+def test_a_line_written_from_the_candidates_words_passes_the_guards():
+    checked = apply_guards(_added_line("Ran 3 services on Kubernetes for two years"), NOTED, JOB)
+
+    assert checked.verification.status == "pending"
+    assert checked.before is None
+
+
+def test_an_added_line_cannot_bring_a_number_the_candidate_did_not_give():
+    checked = apply_guards(_added_line("Ran 12 services on Kubernetes"), NOTED, JOB)
+
+    assert checked.verification.status == "unsupported"
+    assert "12" in checked.verification.reason
+
+
+def test_an_added_line_needs_an_entry_of_the_cv_and_the_candidates_words():
+    no_entry = apply_guards(_added_line("Ran services on Kubernetes", target="E99"), NOTED, JOB)
+    no_words = apply_guards(_added_line("Ran services on Kubernetes"), CV, JOB)
+
+    assert no_entry.verification.status == "unsupported"
+    assert no_words.verification.status == "unsupported"

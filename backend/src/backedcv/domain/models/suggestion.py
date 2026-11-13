@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from backedcv.domain.models.screening import GatePass
 
-SuggestionKind = Literal["align_wording", "add_skill", "tailor_summary"]
+SuggestionKind = Literal["align_wording", "add_skill", "tailor_summary", "add_line"]
 # "refused": backed by the CV, but not viable (old evidence or a hidden barrier); never accepted.
 VerificationStatus = Literal["pending", "verified", "unsupported", "refused"]
 
@@ -40,9 +40,10 @@ class Verification(BaseModel):
 class Suggestion(BaseModel):
     """A proposed change that may only cite the CV.
 
-    `target` is a line ID (L012) for align_wording, or a section ID for add_skill (the line is
-    appended to that section) and tailor_summary (the section's lines are replaced). `before` is
-    the original text of the target line, or None when a line is added.
+    `target` is a line ID (L012) for align_wording, a section ID for add_skill (the line is
+    appended to that section) and tailor_summary (the section's lines are replaced), or an entry
+    ID (E02) for add_line (a new bullet at the end of that job or project). `before` is the
+    original text of the target line, or None when a line is added.
     """
 
     id: str  # S01, S02, ...
@@ -55,6 +56,8 @@ class Suggestion(BaseModel):
     introduced_terms: list[str] = Field(default_factory=list)
     covers_requirement_ids: list[str] = Field(default_factory=list)  # computed in code
     edited_by_user: bool = False
+    # "candidate": written from what the candidate said about a requirement, not from a CV line.
+    source: Literal["cv", "candidate"] = "cv"
     verification: Verification = Field(default_factory=Verification)
 
 

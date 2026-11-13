@@ -20,9 +20,11 @@ from backedcv.domain.models import (
     CVDocument,
     JobPosting,
     ParsedCV,
+    RequirementAssessment,
     ReviewDecisions,
     Suggestion,
 )
+from backedcv.domain.scoring import compute_score
 from backedcv.graph.nodes import _error, _progress
 from backedcv.graph.recompute import assessments_of, flagged_of
 from backedcv.graph.state import AnalysisState
@@ -67,6 +69,7 @@ def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Call
         job = JobPosting.model_validate(state.get("job") or {})
         assessments = assessments_of(state)
         flagged = flagged_of(state)
+        gained = {rid for s in applied if s.source == "candidate" for rid in s.requirement_ids}
         # Typst and the PDF read-back take a moment: a worker thread keeps other requests moving.
         roundtrip_ok, issues = await asyncio.to_thread(_roundtrip, doc)
         report = BuildReport(
@@ -81,6 +84,7 @@ def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Call
                 included_flagged_ids=state.get("included_flagged_ids") or [],
             ),
             fit=score.get("fit"),
+            fit_after=_fit_with(job, assessments, gained, state, flagged) if gained else None,
             roundtrip_ok=roundtrip_ok,
             roundtrip_issues=issues,
             built_by=state.get("built_by") or "fallback",
@@ -104,6 +108,28 @@ def _job_summary(state: AnalysisState) -> str:
     job = JobPosting.model_validate(state.get("job") or {})
     rows = [f"- {req.label} ({req.importance})" for req in job.requirements]
     return "\n".join([f"Title: {job.title or 'unknown'}", *rows])
+
+
+def _fit_with(
+    job: JobPosting,
+    assessments: dict[str, RequirementAssessment],
+    gained: set[str],
+    state: AnalysisState,
+    flagged: dict[str, str],
+) -> float | None:
+    """Fit of the new CV: the requirements the candidate's own lines were written for now count
+    as met, because the CV shows them."""
+    shown = {
+        rid: a.model_copy(update={"status": "met"}) if rid in gained else a
+        for rid, a in assessments.items()
+    }
+    return compute_score(
+        job.requirements,
+        shown,
+        excluded_ids=state.get("excluded_ids") or [],
+        flagged=flagged,
+        included_flagged_ids=state.get("included_flagged_ids") or [],
+    ).fit
 
 
 def _roundtrip(doc: CVDocument) -> tuple[bool, list[str]]:

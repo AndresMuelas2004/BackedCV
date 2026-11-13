@@ -197,6 +197,8 @@ def apply_suggestions(
             _align_wording(result, s)
         elif s.kind == "add_skill":
             _add_skill(result, s)
+        elif s.kind == "add_line":
+            _add_line(result, s)
         else:
             _tailor_summary(result, s)
     return result
@@ -221,6 +223,16 @@ def _add_skill(doc: CVDocument, s: Suggestion) -> None:
     if not section.items:
         section.items.append(DocItem(id=f"{section.id}-i1"))
     section.items[-1].lines.append(DocLine(text=s.after, origin=s.id, kind="text"))
+
+
+def _add_line(doc: CVDocument, s: Suggestion) -> None:
+    """A new bullet at the end of the job or project it belongs to. An entry the document does
+    not have leaves the line out; validate_document reports it."""
+    for section in doc.sections:
+        for item in section.items:
+            if item.id == s.target:
+                item.lines.append(DocLine(text=s.after, origin=s.id, kind="bullet"))
+                return
 
 
 def _tailor_summary(doc: CVDocument, s: Suggestion) -> None:
@@ -286,6 +298,9 @@ def validate_document(
             continue
         if not _is_replaced(line_id, section_of.get(line_id), usable, present):
             errors.append(f"Original line {line_id} is missing from the document")
+    for s in usable.values():
+        if s.kind == "add_line" and s.id not in present:
+            errors.append(f"Accepted line {s.id} has no entry to go under")
     return errors
 
 
