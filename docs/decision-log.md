@@ -11,7 +11,7 @@ What I decided, what I rejected and why.
 
 ## Scoring and verdict
 
-- **Two scores instead of one opaque match rate:** *Fit* (do I meet the requirements, by meaning) and *Keyword coverage* (would an exact-term search find me). Optimizing the CV can raise coverage, never Fit.
+- **Two scores instead of one opaque match rate:** *Fit* (do I meet the requirements, by meaning) and *Keyword coverage* (would an exact-term search find me). Rewording the CV can raise coverage, never Fit. Fit goes up only in the build report, and only when the new CV holds a line the candidate added in their own words.
 - **The score is computed in code from published weights**, never by the model, so every point can be explained and tested.
 - **Knockouts are verdict blockers, not points.** Screening questions are yes/no; mixing them into a percentage hides them.
 - **A knockout is only "missing" when the user says so or the CV says so explicitly.** I never guess eligibility from location or names.
@@ -29,7 +29,7 @@ What I decided, what I rejected and why.
 - **The model cites CV line IDs; code fills in the quotes.** This removes invented quotes.
 - **General evidence never becomes a specific tool** (a direction rule), and inferred matches count as partial at most.
 - **Every suggested edit goes through deterministic guards and an independent verifier.** Unsupported edits cannot be accepted; edited suggestions are verified again.
-- **No generated bullets for missing skills.** That is exactly where these tools invent experience.
+- **No generated bullets for missing skills, unless the candidate speaks first.** That is exactly where these tools invent experience. But a CV often leaves out things its owner has done, so for a skill the CV does not show the candidate can write where and how they used it. The line is written from those words alone, cites them, passes the same guards and a verifier of its own, and waits for the review like any other edit. A statement that does not say the candidate has done it adds nothing, and the review says so.
 - **I measured the no-invention promise and fixed what the measurement found.** On 40 synthetic cases the verifier sometimes let through a rewrite that attached the total years of experience to one role. A language model is not reliable at that arithmetic, so I added a deterministic guard: a computed total can only be used as a total. The verifier is not deterministic, so I keep every run's report.
 
 ## Hidden screening barriers and recency
@@ -52,6 +52,8 @@ What I decided, what I rejected and why.
 - **Dates are shown, never guessed.** The report lists each job's dates as read and the time counted. A missing month says "month unknown" and counts as the shortest period it allows, so the total says "at least".
 - **The landing page shows the result first.** A short example of the report plays before anyone uploads anything, because "paste, upload, press the button" says nothing about what you get.
 - **Same CV and same posting give the same verdict and score.** Testing found that a blank line in the posting could move the score from 55 to 72; the text is normalized before every model call. The same testing also fixed a missing "2+ years" counted as a small partial, a question asked twice, a 2023 degree marked "aging", a date glued to a city ("SpainApr 2026") read as January, and suggestions that only stuffed posting words into a line.
+- **A page limit that never cuts.** The new CV can be fitted into one or two pages by stepping down the text size and the margins (10.5 to 9 points), never by dropping lines. When even the tightest layout is too long, the page says so. The limit is exact for the PDF; the DOCX takes the same sizes.
+- **The download is named after the candidate** (`Jane-Doe-CV.pdf`): a file called `cv-backedcv.pdf` is one more thing to rename before sending it.
 
 ## Architecture
 
