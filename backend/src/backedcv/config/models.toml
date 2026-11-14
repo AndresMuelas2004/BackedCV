@@ -20,3 +20,12 @@ verify_additions = "high"
 review_posting = "low"
 hidden_barriers = "low"
 build_cv = "low"
+research_web = "low"
+research_extract = "low"
+write_outreach = "medium"
+
+# The web search tool of the deeper analysis: the tool version the model takes, and its list price
+# in USD per search, used only to show the cost.
+[web_search]
+tool = "web_search_20250305"
+price_per_search = 0.01

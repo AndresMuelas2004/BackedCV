@@ -12,9 +12,9 @@ from backedcv.domain.document_diff import (
     apply_suggestions,
     diff_document,
     document_from_cv,
-    standard_order,
     validate_document,
 )
+from backedcv.domain.mirror import row_text
 from backedcv.domain.models import (
     BuildReport,
     CVDocument,
@@ -28,14 +28,20 @@ from backedcv.domain.scoring import compute_score
 from backedcv.graph.nodes import _error, _progress
 from backedcv.graph.recompute import assessments_of, flagged_of
 from backedcv.graph.state import AnalysisState
-from backedcv.rendering import render_pdf, roundtrip_check
+from backedcv.rendering import (
+    fit_mirror_pdf,
+    mirror_of,
+    render_pdf,
+    roundtrip_check,
+    roundtrip_lines,
+)
 
 log = logging.getLogger(__name__)
 
 
 def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Callable]:
-    """The build_cv and final_checks nodes. Without an order model, the standard section order
-    is used."""
+    """The build_cv and final_checks nodes. The built CV keeps the order of the CV it came from.
+    The order agent runs only when the user asked for a new order and there is an order model."""
 
     async def build_cv(state: AnalysisState) -> dict:
         _progress("build", "started")
@@ -44,13 +50,11 @@ def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Call
         accepted = {s.id for s in applied}
         doc = apply_suggestions(document_from_cv(cv), cv, applied, accepted)
         built_by, usage, errors = "fallback", [], []
-        if order_model is not None:
+        if order_model is not None and _decisions(state).reorder:
             ws = Workspace(document=doc, cv=cv, applied=applied, accepted_ids=accepted)
             doc, built_by = await run_order_agent(ws, _job_summary(state), order_model)
             usage = ws.usage
             errors = [_error("build_cv", ws.error)] if ws.error is not None else []
-        else:
-            doc = standard_order(doc)
         _progress("build", "done", built_by=built_by)
         return {
             "document": doc.model_dump(),
@@ -71,7 +75,7 @@ def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Call
         flagged = flagged_of(state)
         gained = {rid for s in applied if s.source == "candidate" for rid in s.requirement_ids}
         # Typst and the PDF read-back take a moment: a worker thread keeps other requests moving.
-        roundtrip_ok, issues = await asyncio.to_thread(_roundtrip, doc)
+        roundtrip_ok, issues = await asyncio.to_thread(_roundtrip, state, doc)
         report = BuildReport(
             diff=diff_document(cv, doc, applied),
             coverage_before=score.get("coverage"),
@@ -96,9 +100,13 @@ def make_build_nodes(order_model: BaseChatModel | None = None) -> dict[str, Call
     return {"build_cv": build_cv, "final_checks": final_checks}
 
 
+def _decisions(state: AnalysisState) -> ReviewDecisions:
+    return ReviewDecisions.model_validate(state.get("decisions") or {})
+
+
 def _applied(state: AnalysisState) -> list[Suggestion]:
     """The suggestions the user accepted and the verifier passed, in their stored order."""
-    accepted = set(ReviewDecisions.model_validate(state.get("decisions") or {}).accepted)
+    accepted = set(_decisions(state).accepted)
     suggestions = [Suggestion.model_validate(row) for row in state.get("suggestions") or []]
     return [s for s in suggestions if s.id in accepted and s.verification.status == "verified"]
 
@@ -132,9 +140,14 @@ def _fit_with(
     ).fit
 
 
-def _roundtrip(doc: CVDocument) -> tuple[bool, list[str]]:
-    """Render the CV and read the PDF back. A failed render is a failed check, never an error."""
+def _roundtrip(state: AnalysisState, doc: CVDocument) -> tuple[bool, list[str]]:
+    """Render the CV as it will be downloaded and read the PDF back. A failed render is a failed
+    check, never an error."""
     try:
+        mirror = mirror_of(state, doc)
+        if mirror is not None:
+            pdf = fit_mirror_pdf(mirror.rows, mirror.page, mirror.title).pdf
+            return roundtrip_lines(pdf, [row_text(row) for row in mirror.rows])
         return roundtrip_check(render_pdf(doc), doc)
     except Exception as exc:  # the build report must still be written
         log.warning("CV render failed: %s", exc)

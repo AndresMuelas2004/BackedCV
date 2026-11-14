@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from backedcv.domain.models.layout import LineFormat
 from backedcv.domain.redaction import numbered_rows
 
 LineSource = Literal["body", "header", "footer", "textbox", "table"]
@@ -28,6 +29,9 @@ class CVLine(BaseModel):
     source: LineSource = "body"
     bold: bool = False
     size: float | None = None
+    # How the line looks in the uploaded file. None for pasted text and for files whose format
+    # is not read.
+    fmt: LineFormat | None = None
 
 
 class ComputedFact(BaseModel):

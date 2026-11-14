@@ -55,12 +55,24 @@ What I decided, what I rejected and why.
 - **A page limit that never cuts.** The new CV can be fitted into one or two pages by stepping down the text size and the margins (10.5 to 9 points), never by dropping lines. When even the tightest layout is too long, the page says so. The limit is exact for the PDF; the DOCX takes the same sizes.
 - **The download is named after the candidate** (`Jane-Doe-CV.pdf`): a file called `cv-backedcv.pdf` is one more thing to rename before sending it.
 
+## The look of the uploaded CV
+
+- **The built CV keeps the look of the uploaded PDF.** The first version printed every CV in one fixed template: a one-page CV came back on two pages, with its bold gone and its dates no longer on the right. The reader now takes the look of each line from the file (the style of every run of text, the alignment, the text set against the right edge, bullets, rules, links and the distance between baselines), and the writer sets the rows one by one from it.
+- **I typeset the CV again instead of editing the PDF in place.** A PDF has no paragraphs to reflow: a longer line would need every line under it moved, and its fonts are embedded as subsets that lack the letters a new line needs. Typesetting from measurements handles added and removed lines and keeps real, selectable text in one column.
+- **Bundled open fonts stand in for the usual CV fonts.** Caladea for Cambria, Carlito for Calibri, Liberation Sans for Arial and Helvetica, Liberation Serif for Times New Roman: they have the same letter widths, so lines break where they did. I cannot ship the originals, and the server does not have them. Any other font takes the serif or the sans fallback, so it looks close, not the same. The DOCX names the original font, so Word uses it when it is installed.
+- **A rewritten line takes the format of the line it replaces, word by word; an added line takes the format of the line above it.** Unchanged words keep their style and their exact characters, and a new word never becomes a link.
+- **Without a page limit, the new CV takes the pages the uploaded one had.** When accepted lines make it longer, text and spacing shrink in steps of 2% down to 86%, never the margins, and nothing is cut. Past that, the screen says it does not fit.
+- **The plain template is still there, as a choice.** It is the format for pasted text and Word files, whose look is not read yet, and for a CV with columns whose owner prefers it. A CV with columns keeps its fonts, sizes and order but is set in one column, and the screen says so.
+- **The look is stored as plain data, not as the file.** The uploaded bytes are still dropped after reading. The checkpoint holds the format of each line next to its text, and the frontend never receives it.
+- **Word files keep their order, not yet their look.** The right way there is to edit the uploaded file in place, which means keeping the file for the life of the analysis. That is a privacy decision I have not taken.
+- **Reading the look fixed two reading defects.** Words were joined with a space where the font changed inside a word ("Intern , Acme"), and an accented "i" written as a dotless letter plus an accent came out broken. Both now read as written.
+
 ## Architecture
 
 - **One LangGraph graph per analysis** with two human-in-the-loop pauses (before optimizing, and the review of suggestions) and parallel fan-out for matching and verification.
 - **Files are read in the API, before the graph**, so no file bytes end up in checkpoints.
 - **Code applies the accepted changes; a small tool-calling agent only orders the final CV**, with a deterministic fallback. I rejected an agent that writes free text.
-- **When the ordering agent is unavailable, the new CV uses a standard section order.** Keeping the original order would put a two-column CV's sidebar (education, skills) before the summary.
+- **The new CV keeps the order of the CV it came from.** I first gave it a standard section order and let the agent reorder it for every job. Then a real CV came back with its sections moved, which nobody had asked for. The order is the candidate's choice: the agent now reorders only when the candidate ticks that option in the review.
 - **No RAG, vector database or embeddings for now:** one CV and one posting fit in the model's context. Embeddings come in only if meaning-based matching through the model proves unreliable.
 - **The posting review and the barrier screen run in the same graph step as the matching.** They need the extracted requirements, not the matching. I timed every model call and found that the matching was waiting for them, 3 to 6 seconds of a 16 to 25 second check, because they sat one step earlier; now the slowest of the three decides the wait.
 - **The model keeps its thinking on when it reads the posting.** That call is the slowest (6 to 16 seconds). Turning thinking off made it twice as fast, but in two runs out of two it lost the on-site knockout of the hidden-barriers sample and repeated skills from the duties, so I kept it.
@@ -84,6 +96,17 @@ What I decided, what I rejected and why.
 - **I rejected passing the whole page to the model.** It would be slower, cost tokens and nearly fill the prompt budget, while the markup is regular enough for code.
 - **Plan B, if LinkedIn blocks the hosting provider:** a browser extension that reads the page in the user's own browser, or a paid scraping service such as Apify.
 - **The slow part was the sleeping server, not LinkedIn.** A read takes about half a second, also from the hosting provider; the minute I had seen was the free server waking up. The page now keeps the server awake while it is open, and a scheduled request keeps it awake during the day.
+
+## Deeper analysis of a posting
+
+- **A deeper look at one job, on request.** When a posting matters, the candidate can ask who is behind it: what the company does, who owns the posting, the team the role joins, its recruiters and how to reach them, with a plan and messages ready to send. It is a button on the report, not part of every analysis: it costs more than everything else together.
+- **Anthropic's web search tool does the searching.** It runs on Anthropic's side, needs no other vendor or key, and returns the pages it read with the passages it cites. I rejected scraping LinkedIn (its terms, and the same blocking risk as the job link), people-data and email-finder services (a new vendor, a cost per lookup, and personal data bought in bulk), and logging in as the user.
+- **Three lookups run at once, each with at most three searches.** Company, hiring team, recruiters and channels. Search results fill the prompt fast; small parallel lookups keep every call far below the 100K-token rate change and make the wait the slowest lookup, not their sum.
+- **Nothing invented, here too.** The model that searches writes notes; a second call turns them into people, facts and channels; then code keeps a person only when a page the searches returned shows the name (in its title or in a cited passage), a link only when a search returned it or the posting holds it, and an email address only when a page or the posting writes it out. What fails is left out and counted in the result.
+- **No guessed email addresses.** Building `first.last@company.com` from a name is the usual trick, and I left it out: it writes to people who did not publish that address, it is often wrong, and it does not fit a tool whose promise is that every claim has a source.
+- **Messages cite the CV.** Each draft names the CV lines it relies on and is dropped when it cites none. The model sees the CV without contact details and signs with a placeholder that code replaces with the candidate's name.
+- **Its own thread, lock and limits.** The result lives in a checkpoint thread next to the analysis, so the report stays usable while it runs, and it is deleted with the analysis. Limits: 5 runs per client address per hour and 40 per day for everyone.
+- **Only public, professional information.** No home addresses, private phones or personal accounts, by prompt. Names and roles come with the page that shows them, and nothing is kept past the analysis's 24 hours.
 
 ## Privacy and limits
 

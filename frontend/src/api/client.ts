@@ -4,6 +4,7 @@ import type {
   CandidateFacts,
   CoveragePreview,
   CvLayout,
+  CvStyle,
   ErrorBody,
   HiddenRiskSample,
   InputsUpdate,
@@ -11,6 +12,8 @@ import type {
   OptimizeStep,
   ProgressEvent,
   ProgressStep,
+  ResearchStep,
+  ResearchView,
   ReviewDecisions,
   Samples,
 } from './types'
@@ -61,6 +64,11 @@ export type OptimizeEvent =
 export type BuildEvent =
   | { type: 'progress'; progress: ProgressEvent<BuildStep> }
   | { type: 'built'; report: AnalysisReport }
+  | { type: 'error'; error: ErrorBody }
+
+export type ResearchEvent =
+  | { type: 'progress'; progress: ProgressEvent<ResearchStep> }
+  | { type: 'research'; view: ResearchView }
   | { type: 'error'; error: ErrorBody }
 
 export type CvDownloadFormat = 'docx' | 'pdf'
@@ -235,7 +243,11 @@ export async function runBuild(
         init: {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accepted: decisions.accepted, rejected: decisions.rejected }),
+          body: JSON.stringify({
+            accepted: decisions.accepted,
+            rejected: decisions.rejected,
+            reorder: decisions.reorder ?? false,
+          }),
         },
         label: 'CV build',
         parse: toBuildEvent,
@@ -247,29 +259,38 @@ export async function runBuild(
   )
 }
 
-// `maxPages` fits the CV into that many pages (smaller text and margins, nothing cut); null: any length.
+// `maxPages` fits the CV into that many pages (smaller text, nothing cut); null leaves the length
+// to the server. `style` picks the format; null lets the server choose (the uploaded file's look
+// when it was read).
 export function cvDownloadUrl(
   id: string,
   format: CvDownloadFormat,
   maxPages: number | null = null,
+  style: CvStyle | null = null,
 ): string {
-  const query = maxPages === null ? '' : `?max_pages=${maxPages}`
-  return `${API_BASE}/analyses/${encodeURIComponent(id)}/cv.${format}${query}`
+  return `${API_BASE}/analyses/${encodeURIComponent(id)}/cv.${format}${cvQuery(maxPages, style)}`
 }
 
-// How many pages the built CV takes, and whether it fits a page limit. The signal cancels a stale
-// request.
+// How many pages the built CV takes in a format, and whether it fits a page limit. The signal
+// cancels a stale request.
 export async function getCvLayout(
   id: string,
   maxPages: number | null,
+  style: CvStyle | null,
   signal?: AbortSignal,
 ): Promise<CvLayout> {
-  const query = maxPages === null ? '' : `?max_pages=${maxPages}`
-  const response = await send(`${API_BASE}/analyses/${encodeURIComponent(id)}/cv-layout${query}`, {
-    signal,
-  })
+  const url = `${API_BASE}/analyses/${encodeURIComponent(id)}/cv-layout${cvQuery(maxPages, style)}`
+  const response = await send(url, { signal })
   if (!response.ok) throw await readError(response)
   return (await response.json()) as CvLayout
+}
+
+function cvQuery(maxPages: number | null, style: CvStyle | null): string {
+  const params = new URLSearchParams()
+  if (maxPages !== null) params.set('max_pages', String(maxPages))
+  if (style !== null) params.set('style', style)
+  const query = params.toString()
+  return query ? `?${query}` : ''
 }
 
 export async function deleteAnalysis(id: string): Promise<void> {
@@ -277,6 +298,30 @@ export async function deleteAnalysis(id: string): Promise<void> {
     method: 'DELETE',
   })
   if (!response.ok) throw await readError(response)
+}
+
+// The deeper analysis of the posting as it stands: not run yet, running, done or failed.
+export async function getResearch(id: string, signal?: AbortSignal): Promise<ResearchView> {
+  const response = await send(`${API_BASE}/analyses/${encodeURIComponent(id)}/research`, { signal })
+  if (!response.ok) throw await readError(response)
+  return (await response.json()) as ResearchView
+}
+
+// Runs the deeper analysis: it searches the web for the company and the people behind the posting.
+export async function runResearch(
+  id: string,
+  onEvent: (event: ResearchEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  await streamEvents({
+    url: `${API_BASE}/analyses/${encodeURIComponent(id)}/research`,
+    init: { method: 'POST' },
+    label: 'deeper analysis',
+    parse: toResearchEvent,
+    ends: (event) => event.type === 'research' || event.type === 'error',
+    onEvent,
+    signal,
+  })
 }
 
 // Used when an "error" event does not carry an ErrorBody.
@@ -293,6 +338,11 @@ const OPTIMIZE_FAILED: ErrorBody = {
 const BUILD_FAILED: ErrorBody = {
   code: 'build_failed',
   title: 'The CV could not be built.',
+  detail: '',
+}
+const RESEARCH_FAILED: ErrorBody = {
+  code: 'research_failed',
+  title: 'The deeper analysis could not finish.',
   detail: '',
 }
 
@@ -516,6 +566,22 @@ function toOptimizeEvent(message: SseMessage): OptimizeEvent | null {
 
 function toBuildEvent(message: SseMessage): BuildEvent | null {
   return parseStreamEvent<'built', BuildStep>(message, 'built', BUILD_FAILED)
+}
+
+function toResearchEvent(message: SseMessage): ResearchEvent | null {
+  const payload = parseJson(message.data)
+  switch (message.event) {
+    case 'progress': {
+      const progress = toProgress<ResearchStep>(payload)
+      return progress ? { type: 'progress', progress } : null
+    }
+    case 'research':
+      return isRecord(payload) ? { type: 'research', view: payload as unknown as ResearchView } : null
+    case 'error':
+      return { type: 'error', error: errorFrom(payload, RESEARCH_FAILED) }
+    default:
+      return null
+  }
 }
 
 // Shape is checked shallowly; the backend is trusted for the rest.

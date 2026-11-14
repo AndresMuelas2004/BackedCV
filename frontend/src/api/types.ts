@@ -300,6 +300,8 @@ export interface Suggestion {
 export interface ReviewDecisions {
   accepted: string[]
   rejected: string[]
+  // True: sections and entries are reordered for the posting. Default: the CV keeps its own order.
+  reorder?: boolean
 }
 
 // `coverage` is the keyword coverage if the accepted changes were built, `coverage_now` the
@@ -371,6 +373,9 @@ export interface BuildReport {
   validation_errors: string[]
 }
 
+// The format of the built CV: the look of the uploaded file, or the plain one-column template.
+export type CvStyle = 'original' | 'standard'
+
 // How many pages the built CV takes, and whether it fits the page limit that was asked.
 export interface CvLayout {
   pages: number
@@ -378,6 +383,10 @@ export interface CvLayout {
   fits: boolean
   font_size: number
   standard_font_size: number
+  style: CvStyle // the format this answer is about
+  styles: CvStyle[] // the formats this CV can be built in; "original" needs an uploaded PDF
+  original_pages: number | null // pages of the uploaded file, when its format was read
+  columns: number // text columns of the uploaded file; 1 when unknown
 }
 
 // A statement of the candidate from which no line was written, with the reason.
@@ -538,6 +547,7 @@ export type ProgressStep = 'prepare_cv' | 'prepare_job' | 'match' | 'score'
 // Steps of the optimize stream and of the build stream (the analysis has its own list).
 export type OptimizeStep = 'suggest' | 'verify'
 export type BuildStep = 'build' | 'checks'
+export type ResearchStep = 'plan' | 'search' | 'extract' | 'drafts'
 
 export type ProgressStatus = 'started' | 'done' | 'chunk_done'
 
@@ -552,6 +562,7 @@ export interface ProgressEvent<Step extends string = ProgressStep> {
   suggestions?: number
   built_by?: 'agent' | 'fallback'
   roundtrip_ok?: boolean | null
+  topic?: string // with the "search" step of the deeper analysis: what is being looked up
 }
 
 // Body of every JSON error, and of the "error" SSE event.
@@ -594,4 +605,85 @@ export interface InputsUpdate {
   facts?: Partial<CandidateFacts>
   excluded_ids?: string[]
   included_flagged_ids?: string[]
+}
+
+// Deeper analysis of a posting (GET and POST /api/analyses/{id}/research)
+
+export type PersonGroup = 'posting_owner' | 'hiring_team' | 'recruiting' | 'leadership' | 'peer'
+export type ChannelKind = 'email' | 'application' | 'careers_page' | 'company_profile' | 'other'
+export type OutreachKind = 'apply' | 'connect' | 'message' | 'email' | 'follow'
+
+export interface ResearchSource {
+  url: string
+  title: string
+}
+
+export interface CompanyFact {
+  label: string
+  value: string
+  source_url: string
+}
+
+export interface CompanyBrief {
+  name: string | null
+  summary: string
+  facts: CompanyFact[]
+}
+
+// Every person names the page that shows them at the company.
+export interface ResearchPerson {
+  id: string
+  name: string
+  role: string
+  group: PersonGroup
+  why: string
+  profile_url: string | null
+  source_url: string
+}
+
+// `source_url` is null when the posting itself shows the address or the link.
+export interface ResearchChannel {
+  id: string
+  kind: ChannelKind
+  value: string
+  label: string
+  source_url: string | null
+}
+
+// `evidence` holds the CV line IDs the text relies on.
+export interface OutreachDraft {
+  subject: string | null
+  body: string
+  evidence: string[]
+}
+
+export interface OutreachAction {
+  id: string
+  kind: OutreachKind
+  title: string
+  why: string
+  person_id: string | null
+  channel_id: string | null
+  draft: OutreachDraft | null
+}
+
+export interface ResearchReport {
+  company: CompanyBrief
+  people: ResearchPerson[]
+  channels: ResearchChannel[]
+  actions: OutreachAction[]
+  notes: string[] // what was not found or was left out
+  sources: ResearchSource[]
+  searches: number
+  created_at: string
+}
+
+export type ResearchStatus = 'none' | 'running' | 'done' | 'failed'
+
+// `available` is false when this server cannot run the deeper analysis.
+export interface ResearchView {
+  status: ResearchStatus
+  available: boolean
+  report: ResearchReport | null
+  error: ErrorBody | null
 }

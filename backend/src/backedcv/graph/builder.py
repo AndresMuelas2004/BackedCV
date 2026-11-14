@@ -14,7 +14,7 @@ MAX_CONCURRENCY = 8
 
 
 def build_graph(llm: StructuredLLM, checkpointer=None, order_model=None):
-    """`order_model` is the chat model of the ordering agent; None uses the standard order."""
+    """`order_model` is the chat model of the ordering agent; None keeps the CV's own order."""
     nodes = make_nodes(llm)
     optimize = make_optimize_nodes(llm)
     build = make_build_nodes(order_model)

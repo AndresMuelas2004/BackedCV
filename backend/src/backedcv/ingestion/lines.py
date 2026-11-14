@@ -2,10 +2,14 @@
 
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from backedcv.domain.models import CVLine
+from backedcv.domain.models import CVLine, LineFormat
 from backedcv.domain.models.cv import LineSource
 from backedcv.domain.text import fold
+
+if TYPE_CHECKING:  # pdf_format imports this module, so it is not imported at run time here
+    from backedcv.ingestion.pdf_format import Shape
 
 BULLET_GLYPHS = "•▪●◦‣⁃■□∙·*>-–"
 _BULLET = re.compile(r"^[\s•▪●◦‣⁃■□∙·*>-]+\s*")
@@ -39,6 +43,7 @@ class RawLine:
     source: LineSource = "body"
     bold: bool = False
     size: float | None = None
+    fmt: LineFormat | None = None
 
 
 @dataclass
@@ -55,6 +60,7 @@ class Fragment:
     size: float
     bold: bool
     heading: bool  # bold, or bigger than the running text of its page
+    shape: "Shape | None" = None  # the PDF look of the line; None for text that is not a PDF
 
 
 def clean(text: str) -> str:
@@ -78,6 +84,7 @@ def number_lines(rows: list[RawLine]) -> list[CVLine]:
                 source=row.source,
                 bold=row.bold,
                 size=row.size,
+                fmt=row.fmt,
             )
         )
     return lines
@@ -85,6 +92,11 @@ def number_lines(rows: list[RawLine]) -> list[CVLine]:
 
 def join_fragments(fragments: list[Fragment]) -> list[RawLine]:
     """Rebuild the logical lines of one column block from its physical lines, top to bottom."""
+    return [merge_fragments(group) for group in group_fragments(fragments)]
+
+
+def group_fragments(fragments: list[Fragment]) -> list[list[Fragment]]:
+    """The physical lines of one column block, grouped into the logical lines they make up."""
     reach = _reach(fragments)
     groups: list[list[Fragment]] = []
     for fragment in fragments:
@@ -92,7 +104,7 @@ def join_fragments(fragments: list[Fragment]) -> list[RawLine]:
             groups[-1].append(fragment)
         else:
             groups.append([fragment])
-    return [_merge(group) for group in groups]
+    return groups
 
 
 def _reach(fragments: list[Fragment]) -> float:
@@ -112,7 +124,13 @@ def _continues(group: list[Fragment], nxt: Fragment, reach: float) -> bool:
         return True
     if last.x1 < reach:  # a line that stops well short of the block's edge is complete
         return False
-    if _is_break(last) or _is_break(nxt) or _is_bullet(nxt.text):
+    if (
+        _is_break(last)
+        or _is_break(nxt)
+        or _is_bullet(nxt.text)
+        or _marked(nxt)
+        or _starts_bold_after_plain(last, nxt)
+    ):
         return False
     unfinished = _SENTENCE_END.search(fold(last.text)) is None
     if _is_bullet(first.text):
@@ -120,6 +138,8 @@ def _continues(group: list[Fragment], nxt: Fragment, reach: float) -> bool:
             return True
         # A "•" typed as text wraps to the margin; there, only an unfinished line runs on.
         return unfinished and abs(nxt.x0 - first.x0) <= _INDENT_TOLERANCE
+    if _marked(first):  # a drawn marker: only its own wrapped lines sit under its text
+        return abs(nxt.x0 - first.x0) <= _INDENT_TOLERANCE
     if abs(nxt.x0 - first.x0) > _INDENT_TOLERANCE:
         return False
     return unfinished or _starts_lower(nxt.text)
@@ -136,6 +156,17 @@ def _is_title_wrap(first: Fragment, last: Fragment, nxt: Fragment) -> bool:
         and not _stands_alone(last.text)
         and not _stands_alone(nxt.text)
     )
+
+
+def _starts_bold_after_plain(last: Fragment, nxt: Fragment) -> bool:
+    """A line that opens in bold right under text that ends in regular type starts something new
+    (a label, a title): running text does not turn bold exactly at a line break."""
+    if last.shape is None or nxt.shape is None:
+        return False
+    if not nxt.shape.spans or not nxt.shape.spans[0].bold:
+        return False
+    ending = last.shape.tail or last.shape.spans
+    return bool(ending) and not ending[-1].bold
 
 
 def _is_break(fragment: Fragment) -> bool:
@@ -162,6 +193,11 @@ def _is_caps_heading(text: str) -> bool:
     return len(text) <= _CAPS_MAX and _SENTENCE_END.search(text) is None
 
 
+def _marked(fragment: Fragment) -> bool:
+    """True for a line that starts with a drawn marker (a dot, not a glyph in the text)."""
+    return fragment.shape is not None and fragment.shape.bullet is not None
+
+
 def _is_bullet(text: str) -> bool:
     return _BULLET_START.match(text.lstrip()) is not None
 
@@ -170,7 +206,7 @@ def _starts_lower(text: str) -> bool:
     return next((char for char in text if char.isalpha()), "").islower()
 
 
-def _merge(group: list[Fragment]) -> RawLine:
+def merge_fragments(group: list[Fragment]) -> RawLine:
     text = group[0].text
     for fragment in group[1:]:
         text = _join(text, fragment.text)
@@ -180,6 +216,11 @@ def _merge(group: list[Fragment]) -> RawLine:
 
 def _join(left: str, right: str) -> str:
     """Join with a space; a hyphen that ends a line joins a lowercase word with no space."""
-    if _HYPHEN_END.search(fold(left)) and _starts_lower(right):
+    if joins_without_space(left, right):
         return left + right
     return f"{left} {right}"
+
+
+def joins_without_space(left: str, right: str) -> bool:
+    """A hyphen that ends a line and a lowercase word after it: the word is one, so no space."""
+    return _HYPHEN_END.search(fold(left)) is not None and _starts_lower(right)

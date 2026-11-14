@@ -35,18 +35,6 @@ STANDARD_HEADINGS: dict[SectionType, str] = {
     "other": "Other",
 }
 
-# The section order of a built CV when the build agent does not set one.
-STANDARD_SECTION_ORDER: tuple[str, ...] = (
-    "summary",
-    "experience",
-    "projects",
-    "education",
-    "certifications",
-    "skills",
-    "languages",
-    "other",
-)
-
 # Headings that open the contact block. The model often leaves that heading out of the contact
 # section, so the text decides it for a line outside every content section.
 _CONTACT_HEADINGS = frozenset(
@@ -73,7 +61,7 @@ def document_from_cv(cv: ParsedCV) -> CVDocument:
     sections = [
         _section(cv, section, lines, placed) for section in cv.sections if section.type != "contact"
     ]
-    leftovers = [line_id for line_id in _body_ids(cv) if line_id not in placed]
+    leftovers = [line_id for line_id in body_line_ids(cv) if line_id not in placed]
     if leftovers:
         sections.append(_other_section(leftovers, lines))
     return CVDocument(contact=_contact(cv), sections=sections)
@@ -293,7 +281,7 @@ def validate_document(
         if error is not None:
             errors.append(error)
     section_of = {line_id: s.id for s in cv.sections for line_id in s.line_ids}
-    for line_id in _body_ids(cv):
+    for line_id in body_line_ids(cv):
         if line_id in present:
             continue
         if not _is_replaced(line_id, section_of.get(line_id), usable, present):
@@ -449,21 +437,7 @@ def reorder_items(doc: CVDocument, section_id: str, ordered_ids: Sequence[str]) 
     return result
 
 
-def standard_order(doc: CVDocument) -> CVDocument:
-    """The document with its sections in STANDARD_SECTION_ORDER. Sections of one type keep their
-    relative order, and so do the items inside every section."""
-    result = doc.model_copy(deep=True)
-    result.sections.sort(key=lambda section: _standard_rank(section.type))
-    return result
-
-
-def _standard_rank(section_type: str) -> float:
-    if section_type in STANDARD_SECTION_ORDER:
-        return STANDARD_SECTION_ORDER.index(section_type)
-    return STANDARD_SECTION_ORDER.index("other") - 0.5  # an unknown type goes just before "other"
-
-
-def _body_ids(cv: ParsedCV) -> list[str]:
+def body_line_ids(cv: ParsedCV) -> list[str]:
     """Every CV line that must appear in the document, in CV order."""
     skipped = _non_body_ids(cv)
     return [line.id for line in cv.lines if line.id not in skipped]

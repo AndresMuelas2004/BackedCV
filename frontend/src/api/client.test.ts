@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, runAnalysis, runOptimize, type AnalysisEvent, type OptimizeEvent } from './client'
+import {
+  ApiError,
+  cvDownloadUrl,
+  runAnalysis,
+  runOptimize,
+  type AnalysisEvent,
+  type OptimizeEvent,
+} from './client'
 
 // A streamed response whose body arrives in the given chunks.
 function sse(chunks: string[]): Response {
@@ -95,5 +102,27 @@ describe('runOptimize', () => {
     })
 
     expect(events.map((event) => event.type)).toEqual(['progress', 'suggestions'])
+  })
+})
+
+describe('cvDownloadUrl', () => {
+  it('has no query when no limit or format is given', () => {
+    expect(cvDownloadUrl('a1', 'pdf')).toBe('/api/analyses/a1/cv.pdf')
+  })
+
+  it('adds the page limit', () => {
+    expect(cvDownloadUrl('a1', 'pdf', 1)).toBe('/api/analyses/a1/cv.pdf?max_pages=1')
+  })
+
+  it('adds the format', () => {
+    expect(cvDownloadUrl('a1', 'docx', null, 'standard')).toBe(
+      '/api/analyses/a1/cv.docx?style=standard',
+    )
+  })
+
+  it('adds both, page limit first', () => {
+    expect(cvDownloadUrl('a1', 'pdf', 2, 'original')).toBe(
+      '/api/analyses/a1/cv.pdf?max_pages=2&style=original',
+    )
   })
 })

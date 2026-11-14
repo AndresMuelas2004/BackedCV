@@ -1,4 +1,5 @@
-"""Reorders one built CV for one job. Any failure falls back to the standard section order."""
+"""Reorders one built CV for one job, when the user asks for it. Any failure keeps the CV's own
+order."""
 
 import logging
 from typing import Literal
@@ -10,7 +11,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from backedcv.agents.cv_builder.tools import Workspace, make_tools
 from backedcv.config import load
-from backedcv.domain.document_diff import standard_order
 from backedcv.domain.models import CVDocument, CVEntry, DocItem
 from backedcv.domain.redaction import redact_contact
 from backedcv.llm.prompt_loader import load_prompt
@@ -24,8 +24,8 @@ RECURSION_LIMIT = 25
 async def run_order_agent(
     ws: Workspace, job_summary: str, model: BaseChatModel
 ) -> tuple[CVDocument, Literal["agent", "fallback"]]:
-    """The agent's order if it finalized one, else the standard order. Never raises: a failure is
-    kept on `ws.error`."""
+    """The agent's order if it finalized one, else the order the document came with. Never raises:
+    a failure is kept on `ws.error`."""
     original = ws.document
     prompt = load_prompt("build_cv")
     message = (
@@ -43,10 +43,10 @@ async def run_order_agent(
                 "tags": [prompt.id],
             },
         )
-    except Exception as exc:  # the order agent is optional: the standard order is used instead
+    except Exception as exc:  # the order agent is optional: the CV keeps its order
         log.warning("build agent failed: %s", exc)
         ws.error = exc
-        return standard_order(original), "fallback"
+        return original, "fallback"
 
     # ChatAnthropic names its model in `model`; other chat models (the tests' fake) in `model_name`.
     name = getattr(model, "model", None) or getattr(model, "model_name", "unknown")
@@ -54,7 +54,7 @@ async def run_order_agent(
         usage_record("build_cv", name, m) for m in result["messages"] if isinstance(m, AIMessage)
     )
     if not ws.approved:
-        return standard_order(original), "fallback"
+        return original, "fallback"
     return ws.document, "agent"
 
 

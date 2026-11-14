@@ -40,6 +40,8 @@ export default function ReviewScreen({
   onRetrySuggestions,
 }: ReviewScreenProps) {
   const [decisions, setDecisions] = useState<Decisions>(() => fromLists(initialDecisions))
+  // Off by default: the new CV keeps the order of the CV it came from.
+  const [reorder, setReorder] = useState(initialDecisions?.reorder ?? false)
   // Every request of this screen is counted here: while one is in flight, nothing else can be sent.
   const saving = useSaving()
 
@@ -113,6 +115,7 @@ export default function ReviewScreen({
     onBuild({
       accepted: accepted.map((s) => s.id),
       rejected: rejected.map((s) => s.id),
+      reorder,
     })
   }
 
@@ -144,6 +147,19 @@ export default function ReviewScreen({
             )}
           </section>
         )}
+
+        <label className="reorder-choice">
+          <input
+            type="checkbox"
+            checked={reorder}
+            onChange={(event) => setReorder(event.target.checked)}
+            disabled={saving.busy}
+          />
+          <span>
+            <strong>Also reorder my CV for this job.</strong> Sections and entries that matter most
+            for this posting move up. Left off, your CV keeps its own order. The words never change.
+          </span>
+        </label>
 
         <div className="summary-actions">
           <button

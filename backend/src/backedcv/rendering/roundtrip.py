@@ -1,6 +1,6 @@
 """Read the rendered PDF back with our own reader and report the lines that did not survive."""
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 
 from backedcv.domain.models import CVDocument
 from backedcv.domain.text import fold_lower
@@ -9,6 +9,11 @@ from backedcv.ingestion import IngestionError, read_cv
 
 def roundtrip_check(pdf: bytes, doc: CVDocument) -> tuple[bool, list[str]]:
     """Return (ok, issues): the document lines that are missing from the PDF text."""
+    return roundtrip_lines(pdf, _document_lines(doc))
+
+
+def roundtrip_lines(pdf: bytes, texts: Iterable[str]) -> tuple[bool, list[str]]:
+    """Return (ok, issues): the texts that are missing from the PDF text."""
     try:
         extracted = read_cv(pdf, "cv.pdf").lines
     except IngestionError as error:
@@ -16,7 +21,7 @@ def roundtrip_check(pdf: bytes, doc: CVDocument) -> tuple[bool, list[str]]:
 
     stream = _squash(" ".join(line.text for line in extracted))
     issues: list[str] = []
-    for text in _document_lines(doc):
+    for text in texts:
         squashed = _squash(text)
         if squashed and squashed not in stream:
             issues.append(text)

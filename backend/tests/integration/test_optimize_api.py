@@ -95,7 +95,11 @@ def test_the_whole_flow_ends_in_a_built_cv(client):
     assert events[-1][0] == "built"
     built = events[-1][1]
     assert (built["status"], built["stage"]) == ("done", "built")
-    assert built["decisions"] == {"accepted": ["S01", "S03"], "rejected": ["S02"]}
+    assert built["decisions"] == {
+        "accepted": ["S01", "S03"],
+        "rejected": ["S02"],
+        "reorder": False,
+    }
     assert built["build_report"]["roundtrip_ok"] is True
     lines = _lines(built["document"])
     assert "Built a support bot at Acme Corp with agent frameworks (LangGraph)" in lines

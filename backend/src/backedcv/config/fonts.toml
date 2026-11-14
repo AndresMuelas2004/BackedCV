@@ -1,0 +1,27 @@
+# Which bundled open font stands in for a font named in an uploaded CV. A twin has the same letter
+# widths as the font it replaces, so the lines break in the same places. Keys are font family
+# names in lower case with only letters and digits.
+[twins]
+cambria = "Caladea"
+caladea = "Caladea"
+calibri = "Carlito"
+carlito = "Carlito"
+arial = "Liberation Sans"
+helvetica = "Liberation Sans"
+liberationsans = "Liberation Sans"
+arimo = "Liberation Sans"
+timesnewroman = "Liberation Serif"
+times = "Liberation Serif"
+liberationserif = "Liberation Serif"
+tinos = "Liberation Serif"
+
+# A font without a twin takes the serif or the sans fallback, chosen by these words in its name.
+[fallback]
+serif = "Liberation Serif"
+sans = "Liberation Sans"
+serif_words = [
+    "serif", "roman", "georgia", "garamond", "palatino", "bookman", "baskerville", "didot",
+    "bodoni", "minion", "libertin", "merriweather", "playfair", "charter", "cmr", "lmroman",
+    "computermodern", "latinmodern", "lora", "crimson", "antiqua", "century", "constantia",
+    "caslon",
+]

@@ -13,6 +13,7 @@ import { blockReasonOf, mustHaveCount, strengths, verdictView } from '../../lib/
 import CvView from '../CVView'
 import HowComputed from '../HowComputed'
 import ParseReport from '../parse/ParseReport'
+import DeepAnalysis from '../research/DeepAnalysis'
 import RequirementList from '../RequirementList'
 import FixList from './FixList'
 import VerdictHero, { type ActionState } from './VerdictHero'
@@ -106,6 +107,8 @@ export default function ReportView({
       <Strengths analysis={analysis} />
 
       <Dates analysis={analysis} />
+
+      <DeepAnalysis key={analysis.analysis_id} analysis={analysis} />
 
       <section className="rp-details" aria-labelledby="details-title">
         <h2 id="details-title" className="rp-h2-sm">

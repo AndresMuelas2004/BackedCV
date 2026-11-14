@@ -22,6 +22,9 @@ _SPACE_CHARS = re.compile("[\t\xa0\U00001680\U00002000-\U0000200a\U0000202f\U000
 _CONTROL = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f]")
 _SPACE_RUN = re.compile(" {2,}")
 _BLANK_RUN = re.compile("\n{3,}")
+# Some PDFs write an accented i or j as the dotless letter plus a combining accent. That pair has
+# no composed form; with the dotted letter, NFC composes it ("ı" + acute becomes "í").
+_DOTLESS = re.compile("([ıȷ])(?=[̀-ͯ])")
 
 
 def normalize_text(text: str) -> str:
@@ -37,6 +40,7 @@ def normalize_text(text: str) -> str:
     text = _SPACE_CHARS.sub(" ", text)
     text = _CONTROL.sub("", _INVISIBLE.sub("", text))
     # NFC last among the character steps: an invisible joiner can no longer block a composition.
+    text = _DOTLESS.sub(lambda match: "i" if match.group(1) == "ı" else "j", text)
     text = unicodedata.normalize("NFC", text)
     lines = [_SPACE_RUN.sub(" ", line).strip(" ") for line in text.split("\n")]
     return _BLANK_RUN.sub("\n\n", "\n".join(lines)).strip("\n")

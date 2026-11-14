@@ -25,7 +25,8 @@ Most applicant tracking systems (ATS) do not auto-reject on keywords. Knockout q
 5. **Gives a verdict and ranks what to fix.** One headline number, the skills match (Fit: do you meet the requirements?), and in the details an exact-word match (Keyword coverage: would an exact-term search find you?). The verdict is Likely screened out, Answer questions first, Apply, Stretch or Long shot; only a legal ban (work permit, clearance, license) or a "No" to a firm rule screens you out on its own. The open yes/no questions sit right under the verdict, and answering them updates it without a new model call. Then a numbered list ranks what to fix in three tiers (could rule you out, serious gap, worth improving), each item with the posting's sentence next to your CV line and one thing to do, followed by how your CV's dates were read.
 6. **Suggests CV edits and checks each one.** "Improve my CV" suggests rewording, skills and a summary, aimed at requirements you meet in different words. For a skill your CV does not show, you can say in your own words where and how you used it: a new line is written from those words alone and checked against them, and if your words do not say you have done it, nothing is added. Each suggestion is checked by code, then by a separate model call. Anything the CV does not back is marked unsupported and cannot be accepted. A three-pass gate then refuses edits that are backed but not viable (evidence outside the posting's window, or a hidden barrier that no rewording can fix), with the reason.
 7. **You review.** Accept or reject each suggestion. You can edit one, and the edited version is checked again.
-8. **Builds the new CV.** Only accepted, verified changes are applied, in code. An agent may reorder sections and items, but it cannot write text. You get a DOCX and a PDF named after you, which you can fit into one or two pages (smaller text and margins, nothing cut), and the report shows keyword coverage before and after. Fit goes up only when the new CV holds lines you added in your own words.
+8. **Builds the new CV.** Only accepted, verified changes are applied, in code. The new CV keeps the order of yours, and when you uploaded a PDF it keeps its look too: fonts, sizes, bold, alignment, bullets and spacing are read from the file, a rewritten line takes the format of the line it replaces, and an added line the format of the line above it. Reordering for the job is a choice you make in the review, and the agent that does it cannot write text. You get a DOCX and a PDF named after you, in the pages your CV had or in the one or two you ask for (smaller text, nothing cut), and the report shows keyword coverage before and after. Fit goes up only when the new CV holds lines you added in your own words.
+9. **Looks deeper into a job you care about.** On the report, "Deeper analysis of this job" searches public web pages for what the company does, who owns the posting, the team the role joins, its recruiters and the ways to reach them, then writes a plan with messages ready to send. A person or an address is shown only when a page the search returned, or the posting, shows it, with the link; every message cites the CV lines it relies on.
 
 ## Screenshots
 
@@ -198,6 +199,8 @@ GitHub Actions runs all of them on every push ([.github/workflows/ci.yml](.githu
 - pytest
 - Vitest
 - oxlint
+- Anthropic web search tool (deeper analysis)
+- Caladea, Carlito and Liberation fonts (SIL Open Font License), bundled as stand-ins for Cambria, Calibri, Arial and Times New Roman
 - Claude Code (AI coding assistant)
 
 ## Privacy and limits
@@ -209,6 +212,7 @@ GitHub Actions runs all of them on every push ([.github/workflows/ci.yml](.githu
 - Model answers, which can contain text from your CV, are cached in `data/llm_cache.sqlite` (the `backedcv-data` volume under Docker Compose) so identical calls are not paid twice. The hourly purge deletes cached answers older than 24 hours, like analyses. Set `BACKEDCV_LLM_CACHE=false` to turn the cache off.
 - LangSmith tracing is optional. Without `BACKEDCV_ENV=prod`, traces include the CV and posting text. With it, inputs and outputs are hidden. The default is `dev`.
 - Limits: a CV file up to 4 MB and 6 PDF pages, with up to 30,000 characters of text; a posting of 150 to 20,000 characters. Model-using requests are limited to 30 per IP address per hour and 300 per UTC day for all users (defaults, set with `BACKEDCV_RATE_LIMIT_PER_HOUR` and `BACKEDCV_DAILY_MODEL_RUNS`). Behind a proxy, `BACKEDCV_CLIENT_IP_HEADER` names the header that carries the caller's address (the demo uses Cloudflare's `CF-Connecting-IP`).
+- The deeper analysis sends the posting to Anthropic's web search tool and looks up only public, professional information about the company and its people. It never builds an email address from a name. Its result is stored with the analysis and deleted with it. Limits: 5 runs per client address per rolling hour (`BACKEDCV_RESEARCH_PER_HOUR`) and 40 per UTC day for all users (`BACKEDCV_RESEARCH_PER_DAY`); `BACKEDCV_RESEARCH_ENABLED=false` turns it off. A run makes up to 9 searches at Anthropic's list price of 1 cent each, plus the model's tokens.
 - The score is indicative. It shows how your CV lines up with a posting under these published rules. No tool can reproduce a specific company's real ATS score.
 
 ## License

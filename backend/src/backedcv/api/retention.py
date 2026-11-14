@@ -12,6 +12,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from backedcv.api.errors import ApiError
 from backedcv.api.locks import RunLocks
+from backedcv.graph.research import research_thread
 from backedcv.llm.cache import LLMCache
 
 MAX_AGE = timedelta(hours=24)
@@ -67,9 +68,10 @@ async def purge_expired(
     max_age: timedelta = MAX_AGE,
     cache: LLMCache | None = None,
 ) -> list[str]:
-    """Deletes the analyses created more than `max_age` before `now`, with their checkpoints, and
-    the cache rows that old (rows with no creation time count as old). Returns the deleted IDs.
-    A failure on one analysis is logged and the rest go on; a failure on the cache raises."""
+    """Deletes the analyses created more than `max_age` before `now`, with their checkpoints and
+    their deeper analysis, and the cache rows that old (rows with no creation time count as old).
+    Returns the deleted IDs. A failure on one analysis is logged and the rest go on; a failure on
+    the cache raises."""
     cutoff = now - max_age
     purged: list[str] = []
     for analysis_id in ledger.created_before(cutoff):
@@ -80,6 +82,7 @@ async def purge_expired(
         try:
             async with locks.held(analysis_id):
                 await checkpointer.adelete_thread(analysis_id)
+                await checkpointer.adelete_thread(research_thread(analysis_id))
                 ledger.remove(analysis_id)
         except Exception:
             log.exception("could not purge analysis %s", analysis_id)

@@ -21,7 +21,7 @@ class AnalysisState(TypedDict, total=False):
     analysis_id: str
     created_at: str
     as_of: str  # the analysis date (YYYY-MM-DD): the day it was created, or a sample's pinned day
-    cv_meta: dict  # kind, filename, size, lines, multi_column: never the bytes
+    cv_meta: dict  # kind, filename, size, lines, multi_column, layout: never the bytes
     cv_lines: list[dict]
     job_text: str
     facts: dict

@@ -91,6 +91,7 @@ async def start_analysis(
             "size": new.cv.size,
             "lines": len(new.cv.lines),
             "multi_column": new.cv.multi_column,
+            "layout": new.cv.layout.model_dump() if new.cv.layout is not None else None,
         },
         "cv_lines": [line.model_dump() for line in new.cv.lines],
         "job_text": new.job_text,

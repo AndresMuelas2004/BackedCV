@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from pathlib import PurePath
 
-from backedcv.domain.models import CVLine
+from backedcv.domain.models import CVLine, PageLayout
 from backedcv.domain.text import normalize_text
 from backedcv.ingestion.docx_reader import read_docx
 from backedcv.ingestion.errors import IngestionError
@@ -22,6 +22,7 @@ class ReadResult:
     filename: str | None
     size: int
     multi_column: bool = False  # a PDF page was read as two columns
+    layout: PageLayout | None = None  # how the PDF page looks; None for other kinds
 
 
 def read_cv(data: bytes, filename: str | None) -> ReadResult:
@@ -30,7 +31,9 @@ def read_cv(data: bytes, filename: str | None) -> ReadResult:
     kind = _detect_kind(data, filename)
     if kind == "pdf":
         pdf = read_pdf(data, MAX_PAGES)
-        return ReadResult(_finish(pdf.rows), kind, filename, len(data), pdf.multi_column)
+        return ReadResult(
+            _finish(pdf.rows), kind, filename, len(data), pdf.multi_column, pdf.layout
+        )
     return ReadResult(_finish(read_docx(data)), kind, filename, len(data))
 
 

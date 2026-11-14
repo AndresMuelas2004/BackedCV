@@ -27,12 +27,15 @@ from backedcv.api.routes import (
     meta,
     optimize,
     preview,
+    research,
     samples,
 )
 from backedcv.api.runs import RunManager
 from backedcv.graph.builder import build_graph
+from backedcv.graph.research import build_research_graph
 from backedcv.llm.cache import LLMCache
 from backedcv.llm.structured import AnthropicStructuredLLM, StructuredLLM
+from backedcv.llm.web_research import AnthropicWebSearcher, WebSearcher
 from backedcv.settings import get_settings
 
 
@@ -52,9 +55,11 @@ def create_app(
     llm: StructuredLLM | None = None,
     checkpointer=None,
     job_link_transport: httpx.AsyncBaseTransport | None = None,
+    searcher: WebSearcher | None = None,
 ) -> FastAPI:
     """`llm` and `checkpointer` are injectable so tests run without network or disk.
-    `job_link_transport` lets tests answer LinkedIn requests without network."""
+    `job_link_transport` lets tests answer LinkedIn requests without network. `searcher` is the
+    web lookup of the deeper analysis."""
     _show_app_logs()
     settings = get_settings()
     if settings.env == "prod":
@@ -85,6 +90,22 @@ def create_app(
                 saver, ledger_path, llm_cache = checkpointer, ":memory:", None
             app.state.checkpointer = saver
             app.state.graph = build_graph(model, checkpointer=saver, order_model=order_model)
+            # The deeper analysis needs a model that can search the web; tests inject a canned one.
+            web = searcher or (
+                AnthropicWebSearcher(settings)
+                if llm is None and settings.anthropic_api_key
+                else None
+            )
+            app.state.research_graph = (
+                build_research_graph(
+                    model,
+                    web,
+                    checkpointer=saver,
+                    searches_per_step=settings.research_searches_per_step,
+                )
+                if web is not None
+                else None
+            )
             app.state.ledger = AnalysisLedger(ledger_path)
             stack.callback(app.state.ledger.close)
             app.state.purge_task = asyncio.create_task(
@@ -108,6 +129,13 @@ def create_app(
         daily_code="job_link_daily_limit",
         daily_title="The daily limit of job link reads has been reached.",
     )
+    app.state.research_limiter = RunLimiter(
+        per_hour=settings.research_per_hour,
+        per_day=settings.research_per_day,
+        hourly_code="research_rate_limited",
+        daily_code="research_daily_limit",
+        daily_title="The daily limit of deeper analyses has been reached.",
+    )
     app.state.job_link_transport = job_link_transport
     install_error_handlers(app)
     app.add_middleware(ResponseHeaders)
@@ -116,6 +144,7 @@ def create_app(
     app.include_router(inputs.router, prefix="/api")
     app.include_router(job_link.router, prefix="/api")
     app.include_router(optimize.router, prefix="/api")
+    app.include_router(research.router, prefix="/api")
     app.include_router(preview.router, prefix="/api")
     app.include_router(downloads.router, prefix="/api")
     app.include_router(samples.router, prefix="/api")

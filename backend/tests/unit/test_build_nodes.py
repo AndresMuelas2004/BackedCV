@@ -225,7 +225,9 @@ def test_build_cv_keeps_the_agent_order_and_its_usage(monkeypatch):
         return move_section(ws.document, "S03", 0), "agent"
 
     monkeypatch.setattr(build_nodes, "run_order_agent", reorder)
-    update = asyncio.run(make_build_nodes(order_model=object())["build_cv"](_state()))
+    state = _state()
+    state["decisions"] = {**state["decisions"], "reorder": True}
+    update = asyncio.run(make_build_nodes(order_model=object())["build_cv"](state))
 
     assert update["built_by"] == "agent"
     assert [s["id"] for s in update["document"]["sections"]] == ["S03", "S01", "S02"]
@@ -239,7 +241,9 @@ def test_a_failed_order_agent_is_recorded_as_an_error(monkeypatch):
         return ws.document, "fallback"
 
     monkeypatch.setattr(build_nodes, "run_order_agent", failing)
-    update = asyncio.run(make_build_nodes(order_model=object())["build_cv"](_state()))
+    state = _state()
+    state["decisions"] = {**state["decisions"], "reorder": True}
+    update = asyncio.run(make_build_nodes(order_model=object())["build_cv"](state))
 
     assert update["built_by"] == "fallback"
     assert update["errors"] == [{"node": "build_cv", "error": "TimeoutError", "detail": "slow"}]
@@ -275,12 +279,23 @@ def _reading_order_state() -> dict:
     return {"cv": cv.model_dump(), "suggestions": [], "decisions": {"accepted": [], "rejected": []}}
 
 
-def test_without_an_order_model_the_fallback_uses_the_standard_section_order():
+def test_without_a_reorder_request_the_cv_keeps_its_own_order():
     update = _built(_reading_order_state())
 
     assert update["built_by"] == "fallback"
     doc = CVDocument.model_validate(update["document"])
-    assert [section.id for section in doc.sections] == ["S03", "S04", "S01", "S02"]
+    assert [section.id for section in doc.sections] == ["S01", "S02", "S03", "S04"]
+
+
+def test_the_order_agent_is_not_asked_unless_the_user_wants_a_new_order(monkeypatch):
+    async def never(ws, job_summary, model):
+        raise AssertionError("the order agent must not run")
+
+    monkeypatch.setattr(build_nodes, "run_order_agent", never)
+    update = asyncio.run(make_build_nodes(order_model=object())["build_cv"](_state()))
+
+    assert update["built_by"] == "fallback"
+    assert update["usage"] == []
 
 
 def test_a_line_the_candidate_added_raises_fit_in_the_build_report():

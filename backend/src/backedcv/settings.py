@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     job_link_per_hour: int = Field(default=20, ge=1)  # per client address, rolling hour
     job_link_per_day: int = Field(default=500, ge=1)  # all clients together, per UTC day
 
+    # The deeper analysis of a posting searches the web, so it costs more than any other step.
+    research_enabled: bool = True
+    research_per_hour: int = Field(default=5, ge=1)  # per client address, rolling hour
+    research_per_day: int = Field(default=40, ge=1)  # all clients together, per UTC day
+    research_searches_per_step: int = Field(default=3, ge=1, le=10)  # searches one lookup may run
+
     # Behind a proxy that writes the caller's address in a header of its own (Cloudflare:
     # CF-Connecting-IP), name that header so the per-client limits count real clients.
     client_ip_header: str = ""

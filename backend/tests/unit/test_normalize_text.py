@@ -93,3 +93,8 @@ def test_a_pasted_cv_gets_the_same_lines_whatever_its_whitespace():
         "Built ETL\U0000200b pipelines in  Python\r\nSKILLS \r\nPython,\U00002009SQL\r\n\r\n"
     )
     assert read_cv_text(messy).lines == read_cv_text(clean).lines
+
+
+def test_a_dotless_i_with_a_combining_accent_becomes_the_accented_letter():
+    assert normalize_text("hı́brida") == "híbrida"
+    assert normalize_text("Kadıköy") == "Kadıköy"  # a real dotless i stays

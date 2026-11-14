@@ -70,8 +70,8 @@ def project(
         "analysis_id": analysis_id,
         "status": status_of(snapshot, running, failed=error is not None),
         "stage": _stage(snapshot),
-        "cv_meta": values.get("cv_meta"),
-        "cv": values.get("cv"),
+        "cv_meta": _without(values.get("cv_meta"), "layout"),
+        "cv": _cv_without_format(values.get("cv")),
         "job": values.get("job"),
         "job_notes": values.get("job_notes", []),
         "flags": values.get("flags", []),
@@ -98,6 +98,17 @@ def project(
     if error is not None:  # the same body as the `error` event of the run that failed
         projection["error"] = error
     return projection
+
+
+def _without(record: dict | None, key: str) -> dict | None:
+    return None if record is None else {k: v for k, v in record.items() if k != key}
+
+
+def _cv_without_format(cv: dict | None) -> dict | None:
+    """The parsed CV without the look of each line: only the renderers read it."""
+    if not cv:
+        return cv
+    return {**cv, "lines": [_without(line, "fmt") for line in cv.get("lines", [])]}
 
 
 def _stage(snapshot: Any) -> str | None:

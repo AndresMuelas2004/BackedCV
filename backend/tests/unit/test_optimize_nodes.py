@@ -358,7 +358,7 @@ async def test_suggest_verify_and_review_run_as_one_langgraph():
 
     await graph.ainvoke(Command(resume={"accepted": ["S01"], "rejected": ["S03"]}), config)
     done = await graph.aget_state(config)
-    assert done.values["decisions"] == {"accepted": ["S01"], "rejected": ["S03"]}
+    assert done.values["decisions"] == {"accepted": ["S01"], "rejected": ["S03"], "reorder": False}
 
 
 # verify_batch
@@ -498,7 +498,7 @@ async def test_await_review_pauses_then_resumes_with_the_decisions():
 
     await graph.ainvoke(Command(resume={"accepted": ["S01"], "rejected": ["S02"]}), config)
     done = await graph.aget_state(config)
-    assert done.values["decisions"] == {"accepted": ["S01"], "rejected": ["S02"]}
+    assert done.values["decisions"] == {"accepted": ["S01"], "rejected": ["S02"], "reorder": False}
 
 
 @pytest.mark.anyio

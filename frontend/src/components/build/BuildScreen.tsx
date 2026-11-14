@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { cvDownloadUrl, getCvLayout } from '../../api/client'
-import type { AnalysisReport, BuildReport, CvLayout, DiffLine } from '../../api/types'
+import type { AnalysisReport, BuildReport, CvLayout, CvStyle, DiffLine } from '../../api/types'
 import { CitedText } from '../CitationTag'
 import HowComputed from '../HowComputed'
 import ScoreValue from '../review/ScoreValue'
@@ -13,12 +13,15 @@ interface BuildScreenProps {
   onDelete: () => void
 }
 
-// Page limits offered for the new CV. The server tightens text and margins to fit, and never cuts.
-const PAGE_CHOICES: readonly { value: number | null; label: string }[] = [
-  { value: null, label: 'Any length' },
-  { value: 1, label: '1 page' },
-  { value: 2, label: '2 pages' },
-]
+// Page limits offered for the new CV. The server tightens the text to fit, and never cuts. Without
+// a limit, a CV in its own format takes the pages of the uploaded file.
+function pageChoices(style: CvStyle | null): { value: number | null; label: string }[] {
+  return [
+    { value: null, label: style === 'original' ? 'Same as my CV' : 'Any length' },
+    { value: 1, label: '1 page' },
+    { value: 2, label: '2 pages' },
+  ]
+}
 
 type LayoutState =
   | { status: 'loading' }
@@ -27,7 +30,12 @@ type LayoutState =
 
 export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildScreenProps) {
   const [maxPages, setMaxPages] = useState<number | null>(null)
-  const layout = useCvLayout(analysis.analysis_id, maxPages)
+  // null: the server picks the format (the look of the uploaded file when it was read).
+  const [style, setStyle] = useState<CvStyle | null>(null)
+  const layout = useCvLayout(analysis.analysis_id, maxPages, style)
+  const styles = layout.status === 'ready' ? layout.layout.styles : []
+  const shownStyle: CvStyle | null = style ?? (layout.status === 'ready' ? layout.layout.style : null)
+  const columns = layout.status === 'ready' ? layout.layout.columns : 1
   const report = analysis.build_report
   if (!report) {
     return (
@@ -154,11 +162,39 @@ export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildSc
           )}
         </section>
 
+        {styles.includes('original') && (
+          <section className="build-fact" aria-labelledby="format-title">
+            <h3 id="format-title">Format</h3>
+            <fieldset className="page-choices">
+              <legend>Build the CV in</legend>
+              <label className="page-choice">
+                <input
+                  type="radio"
+                  name="cv-style"
+                  checked={shownStyle === 'original'}
+                  onChange={() => setStyle('original')}
+                />
+                The format of my CV
+              </label>
+              <label className="page-choice">
+                <input
+                  type="radio"
+                  name="cv-style"
+                  checked={shownStyle === 'standard'}
+                  onChange={() => setStyle('standard')}
+                />
+                A plain one-column template
+              </label>
+            </fieldset>
+            <p className="screen-note">{formatNote(shownStyle, columns)}</p>
+          </section>
+        )}
+
         <section className="build-fact" aria-labelledby="length-title">
           <h3 id="length-title">Length</h3>
           <fieldset className="page-choices">
             <legend>Fit the CV into</legend>
-            {PAGE_CHOICES.map((choice) => (
+            {pageChoices(shownStyle).map((choice) => (
               <label key={choice.label} className="page-choice">
                 <input
                   type="radio"
@@ -184,14 +220,14 @@ export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildSc
         <div className="downloads">
           <a
             className="btn btn-primary"
-            href={cvDownloadUrl(analysis.analysis_id, 'docx', maxPages)}
+            href={cvDownloadUrl(analysis.analysis_id, 'docx', maxPages, style)}
             download
           >
             Download DOCX
           </a>
           <a
             className="btn btn-primary"
-            href={cvDownloadUrl(analysis.analysis_id, 'pdf', maxPages)}
+            href={cvDownloadUrl(analysis.analysis_id, 'pdf', maxPages, style)}
             download
           >
             Download PDF
@@ -218,8 +254,8 @@ export default function BuildScreen({ analysis, onStartOver, onDelete }: BuildSc
 
 function orderNote(builtBy: BuildReport['built_by']): string {
   return builtBy === 'agent'
-    ? 'An AI agent chose the section order. It can only move sections: the only text changes are the suggestions you accepted.'
-    : 'Standard section order used. The only text changes are the suggestions you accepted.'
+    ? 'You asked for a new order, so an AI agent moved sections and entries for this job. It cannot change words: the only text changes are the suggestions you accepted.'
+    : 'Your CV keeps its own order. The only text changes are the suggestions you accepted.'
 }
 
 function countChanges(diff: DiffLine[]): string {
@@ -234,24 +270,29 @@ function countChanges(diff: DiffLine[]): string {
 
 // The length of the built CV for a page limit, asked again when the limit changes. A reply for
 // an outdated limit is dropped.
-function useCvLayout(analysisId: string, maxPages: number | null): LayoutState {
-  const [answer, setAnswer] = useState<{ key: number | null; state: LayoutState } | null>(null)
+function useCvLayout(
+  analysisId: string,
+  maxPages: number | null,
+  style: CvStyle | null,
+): LayoutState {
+  const key = `${maxPages ?? 'any'}:${style ?? 'auto'}`
+  const [answer, setAnswer] = useState<{ key: string; state: LayoutState } | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
-    getCvLayout(analysisId, maxPages, controller.signal)
+    getCvLayout(analysisId, maxPages, style, controller.signal)
       .then((layout) => {
         if (!controller.signal.aborted) {
-          setAnswer({ key: maxPages, state: { status: 'ready', layout } })
+          setAnswer({ key, state: { status: 'ready', layout } })
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setAnswer({ key: maxPages, state: { status: 'failed' } })
+        if (!controller.signal.aborted) setAnswer({ key, state: { status: 'failed' } })
       })
     return () => controller.abort()
-  }, [analysisId, maxPages])
+  }, [analysisId, maxPages, style, key])
 
-  return answer !== null && answer.key === maxPages ? answer.state : { status: 'loading' }
+  return answer !== null && answer.key === key ? answer.state : { status: 'loading' }
 }
 
 function pagesText(count: number): string {
@@ -261,11 +302,27 @@ function pagesText(count: number): string {
 function lengthText(state: LayoutState, maxPages: number | null): string {
   if (state.status === 'loading') return 'Measuring the length...'
   if (state.status === 'failed') return 'The length could not be measured.'
-  const { pages, fits, font_size: size, standard_font_size: standard } = state.layout
-  if (maxPages === null) return `Your new CV takes ${pagesText(pages)}.`
+  const { pages, fits, font_size: size, standard_font_size: standard, style } = state.layout
+  const original = state.layout.original_pages
+  const tightened = size === standard ? '' : ` The text is at ${size} pt instead of ${standard} pt so that it fits. Nothing is cut.`
+  if (maxPages === null) {
+    if (style !== 'original' || original === null) return `Your new CV takes ${pagesText(pages)}.`
+    if (fits) return `Your new CV takes ${pagesText(pages)}, like the CV you uploaded.${tightened}`
+    return `Your new CV takes ${pagesText(pages)}; the CV you uploaded takes ${pagesText(original)}. Nothing is cut, so accept fewer added lines or allow more pages.`
+  }
   if (!fits) {
     return `It does not fit in ${pagesText(maxPages)}: with the smallest text that still reads well it takes ${pagesText(pages)}. Nothing is cut, so shorten your CV or allow more pages.`
   }
   if (size === standard) return `It fits in ${pagesText(maxPages)} as it is.`
   return `It fits in ${pagesText(maxPages)} with the text at ${size} pt instead of ${standard} pt. Nothing is cut.`
+}
+
+function formatNote(style: CvStyle | null, columns: number): string {
+  if (style === 'standard') {
+    return 'A plain template that screening software reads well. It does not keep the look of your CV.'
+  }
+  if (columns > 1) {
+    return 'Your CV has columns. The new CV keeps its fonts, sizes, bold and order, but in one column, which screening software reads more reliably.'
+  }
+  return 'Same fonts, sizes, bold, alignment and order as the CV you uploaded. Only the changes you accepted are different.'
 }

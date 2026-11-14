@@ -33,6 +33,7 @@ from backedcv.domain.models.job import (
     Requirement,
     RequirementFlag,
 )
+from backedcv.domain.models.layout import Align, LineFormat, PageLayout, Rule, TextSpan
 from backedcv.domain.models.score import Contribution, ScoreBreakdown, Verdict, VerdictReason
 from backedcv.domain.models.screening import (
     ELIGIBILITY_KINDS,
@@ -89,8 +90,13 @@ __all__ = [
     "ComputedFact",
     "Contact",
     "ContactField",
+    "Align",
     "Contribution",
     "Evidence",
+    "LineFormat",
+    "PageLayout",
+    "Rule",
+    "TextSpan",
     "Importance",
     "JobPosting",
     "KnockoutType",

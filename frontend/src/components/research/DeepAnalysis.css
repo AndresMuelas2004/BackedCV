@@ -1,0 +1,160 @@
+.rs {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.rs-lead {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.rs-block {
+  display: grid;
+  gap: 0.5rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
+}
+
+.rs-block h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.rs-block p {
+  margin: 0;
+}
+
+.rs-group h4 {
+  margin: 0.4rem 0 0.3rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rs-people,
+.rs-channels,
+.rs-notes,
+.rs-sources,
+.rs-steps {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rs-person {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
+  background: var(--surface-2);
+}
+
+.rs-person-name span {
+  color: var(--muted);
+}
+
+.rs-links,
+.rs-origin {
+  display: inline-flex;
+  gap: 0.8rem;
+  font-size: 0.85rem;
+}
+
+.rs-facts {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.rs-facts div {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 0.6rem;
+}
+
+.rs-facts dt {
+  color: var(--muted);
+}
+
+.rs-facts dd {
+  margin: 0;
+}
+
+.rs-channels li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+
+.rs-channel-kind {
+  font-weight: 600;
+}
+
+.rs-actions {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.rs-action {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.rs-draft {
+  margin-top: 0.3rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.rs-draft-subject {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.rs-draft-body {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rs-draft-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.2rem 0.8rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.rs-steps li {
+  display: flex;
+  gap: 0.5rem;
+  color: var(--muted);
+}
+
+.rs-steps li.rs-step-done {
+  color: var(--green);
+}
+
+.rs-sources {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .rs-facts div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

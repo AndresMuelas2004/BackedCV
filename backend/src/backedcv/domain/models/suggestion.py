@@ -64,3 +64,6 @@ class Suggestion(BaseModel):
 class ReviewDecisions(BaseModel):
     accepted: list[str] = Field(default_factory=list, max_length=200)
     rejected: list[str] = Field(default_factory=list, max_length=200)
+    # True: the user asked for sections and entries to be reordered for the posting. By default
+    # the built CV keeps the order of the CV it came from.
+    reorder: bool = False

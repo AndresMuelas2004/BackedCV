@@ -3,6 +3,18 @@
   gap: 1.25rem;
 }
 
+.reorder-choice {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-top: 1rem;
+  color: var(--ink-2);
+}
+
+.reorder-choice input {
+  margin-top: 0.25rem;
+}
+
 .skipped-list {
   display: grid;
   gap: 6px;
